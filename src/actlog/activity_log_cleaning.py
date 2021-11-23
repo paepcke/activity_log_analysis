@@ -4,11 +4,13 @@ Created on Nov 18, 2021
 
 @author: paepcke
 '''
+import argparse
 import csv
 import getpass
 import gzip
 import os
 import re
+import sys
 import time
 
 from logging_service import LoggingService
@@ -19,8 +21,6 @@ from pymysql_utils.pymysql_utils import MySQLDB
 #**********
 os.environ['PATH'] = '/usr/local/bin/:' + os.environ['PATH']
 #**********
-
-
 
 ID_POS = 0
 EMPLID_POS = 1
@@ -790,12 +790,59 @@ class BufferClass:
 # ------------------------ Main ------------
 if __name__ == '__main__':
     
+    parser = argparse.ArgumentParser(prog=os.path.basename(sys.argv[0]),
+                                     formatter_class=argparse.RawTextHelpFormatter,
+                                     description="Parse activity log tsv file"
+                                     )
+
+    parser.add_argument('-p', '--password',
+                        action='store_true',
+                        help='whether or not to prompt for databases pwd; default: content of file ~/.ssh/mysql',
+                        default=False
+                        )
+    
+    # parser.add_argument('-s' '--startFresh',
+    #                     action='store_true',
+    #                     default=False,
+    #                     help='whether or not to clear all tables first')
+    
+    parser.add_argument('-u', '--user',
+                        type=str,
+                        help=f'databases user; default {getpass.getuser()}')
+
+    parser.add_argument('activity_log_path',
+                        type=str,
+                        help='Path to activity tsv file; may be gzipped or unzipped')
+
+
+    args = parser.parse_args()
+
+    if not os.path.exists(args.activity_log_path):
+        print(f"Cannot find file {args.activity_log_path}")
+        sys.exit(1)
+
+    if args.user is None:
+        user = getpass.getuser()
+    else:
+        user = args.user
+
+    if args.password:
+        pwd = getpass.getpass(prompt=f"Database password for {user}")
+    else:
+        pwd = None
+    
+    ActivityLogCleaner(args.activity_log_path,
+                       db_user=user,
+                       db_pwd=pwd,
+                       start_fresh=True
+                       )
+    
     #ActivityLogCleaner('/Users/paepcke/Project/Carta/Data/CartaData/ActivityLog/activity_logDec21_2018.csv')
     #ActivityLogCleaner('/tmp/activity_log_2015_Oct24_to_2021_Nov19.tsv')
     #ActivityLogCleaner('/tmp/activity_log_two_lines_clean.tsv')
     #ActivityLogCleaner('/tmp/activity_log_two_lines_cleanest.tsv')
-    ActivityLogCleaner('/tmp/activity_log_2015_Oct24_to_2021_Nov19_Cleanest.tsv.gz',
-                       db_user='root',
-                       db_pwd='',  # ******Remove
-                       start_fresh=True
-                       )
+    #ActivityLogCleaner('/tmp/activity_log_2015_Oct24_to_2021_Nov19_Cleanest.tsv.gz',
+    #                   db_user='root',
+    #                   db_pwd='',  # ******Remove
+    #                   start_fresh=True
+    #                   )
