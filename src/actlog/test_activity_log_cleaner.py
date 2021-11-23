@@ -9,8 +9,8 @@ import unittest
 from src.actlog.activity_log_cleaning import ActivityLogCleaner
 
 
-#*****TEST_ALL = True
-TEST_ALL = False
+TEST_ALL = True
+#TEST_ALL = False
 
 
 class Test(unittest.TestCase):
@@ -25,13 +25,11 @@ class Test(unittest.TestCase):
     # test_init_db
     #-------------------
     
-    #*******@unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
+    @unittest.skipIf(TEST_ALL != True, 'skipping temporarily')
     def test_init_db(self):
         
         actlog_cleaner = ActivityLogCleaner(None, unittesting=True)
-        actlog_cleaner.open_db()
-        print('foo')
-
+        actlog_cleaner.open_db(uname='root', db_name='activity_log', pwd='')
 
     #------------------------------------
     # test_buffer_int_array
