@@ -244,7 +244,8 @@ class ActivityLogCleaner(object):
                            'show_index_page', 'store_calendar_state',
                            'user_message', 'confirm_user_message',
                            'reset_confirm_user_message', 'welcome_to_carta',
-                           'repin', 'decline_user_message']:
+                           'repin', 'decline_user_message', 'reset_lcs_response',
+                           'join_carta_interview']:
                 return
             else:
                 print(f"Unimplemented activity: {caller}/{action}")
