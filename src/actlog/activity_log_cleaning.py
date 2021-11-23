@@ -565,7 +565,7 @@ class ActivityLogCleaner(object):
             try:
                 pwd_file = os.path.join(os.getenv('HOME'), '.ssh/mysql')
                 with open(pwd_file, 'r') as fd:
-                    pwd = fd.read()
+                    pwd = fd.read().strip()
             except Exception as e:
                 raise PermissionError(f"Cannot read MySQL pwd from {pwd_file}: {repr(e)}")
 
@@ -675,8 +675,8 @@ class ActivityLogCleaner(object):
                 else:
                     self.log.warn(f"Warnings insert into tbl {dest_tbl}: {warns}")
                 #**************
-                row_num = re.search(r'at row ([0-9]*).*', 'foo at row 878 and').group(1)
-                print('foo')
+                #row_num = re.search(r'at row ([0-9]*).*', 'foo at row 878 and').group(1)
+                #print('foo')
                 #**************
 
             self.log.warn(f"Warnings insert into tbl {dest_tbl}: {warns}")
