@@ -16,6 +16,8 @@ import time
 from logging_service import LoggingService
 from pymysql_utils.pymysql_utils import MySQLDB
 
+from actlog.ipToFullLocation import IpFullLocation
+
 
 # For running in Eclipse on Mac: add path to mysql client:
 #**********
@@ -44,14 +46,50 @@ class ActivityLogCleaner(object):
     DB_NAME = 'activity_log'
     MAX_SEARCH_TERM_LEN = 2000
     
+    DEFAULT_IPLOC_TUPLE = ('--',
+                           'Country-Unknown',   # Country  
+                           'State-Unknown',     # State/Province
+                           'City-Unknown',      # City
+                           '0.0',               # Lat
+                           '0.0',               # Long
+                           'Zip-Unknown',       # Zip/Postal code
+                           'TZ-Unknown',        # Time zone
+                           '-1'                 # Phone country number
+                           '-1'                 # Area code
+                           )
+    '''Used when IP Address not in the database'''
 
     SECS_BETWEEN_HEARTBEATS = 5
 
     STRM_LEN = 4
 
     caller_pat = re.compile(r"")
+
+    # For extracting pins from ENVIRONMENT context
+    # for the two varieties: early format and late
+    # format (2016-2017, 2017-present):
     
-    pins_and_enroll_hist_pat = re.compile(b"pinned:{([^}]*)}, course_history_ids:([^\]]*])")
+    # If successful, the following pattern returns
+    #    b'1156:208582, 1162:120904'
+    context_pinned_early_var_pat = re.compile(b'.*pinned:{([^}]*)}.*')
+    
+    # If successful, the following pattern returns
+    # the list shown in header comment:
+    context_pinned_late_var_phase1_pat = re.compile(b'.*pinned_courses"=>\[([^]]*)].*')
+    # Pick the crse_id nums from the pin specs 
+    # Intended to be used with pattern.findall().
+    # Returns:
+    #   [(b'1214', b'204608'), (b'1214', b'105670'), (b'1214', b'105687'), (b'1214', b'219885')]
+    context_pinned_late_var_phase2_pat = re.compile(b'STRM: ([0-9]{4}), CLASS_NBR: [^,]*, CRSE_ID: ([0-9]{6})')
+    
+    context_enrl_hist_early_pat = re.compile(b'course_history_ids:([^\]]*])')
+    
+    # Pick up the enrire list of #<Enrollment STRM:nil, ... CRSE_ID: 156872, ...>, #<Enrollment...>]
+    context_enrl_hist_late_phase1_pat  = re.compile(b'registered_courses"=>([^\]]*])')
+    # Pick STRM and CRS_ID nums out of the #<Enrollment STRM:nil, ... CRSE_ID: 156872, ...> entries.
+    # Intended to be used with findall().
+    context_enrl_hist_late_phase2_pat  = re.compile(b'CRSE_ID: ([0-9]{6})') 
+    
     p_history_pat = re.compile(b"#<Enrollment (STRM: [0-9]{4}, CRSE_ID: [0-9]{6})")
     # Extract 'selected course' id from 
     #   {selected_course:111846, name:BIO42}
@@ -80,6 +118,7 @@ class ActivityLogCleaner(object):
         '''
         Constructor
         '''
+        self.log = LoggingService()
 
         self.db_user = db_user
 
@@ -112,6 +151,9 @@ class ActivityLogCleaner(object):
         # Visitors lookup up a particular instructor:
         self.instructor_lookup_buf = BufferClass('instructor_lookup_buf', self.DB_BATCH_SIZE_SMALL)
         
+        # IP Address reference:
+        self.ip_location_buf = BufferClass('ip_location_lookup_buf', self.DB_BATCH_SIZE_BIG)
+        
         # Set up map between each buffer and
         # the database table into which it empties.
         # The values contain the table name and the
@@ -134,7 +176,20 @@ class ActivityLogCleaner(object):
             self.crs_selects_buf : ('CrseSelects', ('row_id', 'crs_id')),
             self.crs_search_buf : ('CrseSearches', ('row_id', 'search_term')),
             self.enrl_hist_buf : ('EnrollmentHist', ('row_id', 'crs_id')),
-            self.instructor_lookup_buf : ('InstructorLookups', ('row_id', 'instructor'))
+            self.instructor_lookup_buf : ('InstructorLookups', ('row_id', 'instructor')),
+            self.ip_location_buf : ('IpLocation', 
+                                    (
+                                    'row_id',
+                                    'country_code',
+                                    'country',
+                                    'state',
+                                    'city',
+                                    'lat',
+                                    'longitude',
+                                    'zip',
+                                    'time_zone',
+                                    'country_phone',
+                                    'area_code'))
             }
         
         # Accumulator for search terms as they are typed
@@ -144,8 +199,10 @@ class ActivityLogCleaner(object):
         # Currently searching emplid:
         self.crs_search_state = None
         
-        self.log = LoggingService()
-        
+        self.log.info("Loading IP locations...")
+        self.ip_dict = IpFullLocation()
+        self.log.info("Done loading IP locations.")
+
         if unittesting:
             return
         
@@ -227,7 +284,8 @@ class ActivityLogCleaner(object):
         # Add other info contained in the row:
 
         if caller == 'initial_recommendation':
-            self.extract_pins_and_hist(row, row_id)
+            self.extract_pins(row, row_id)
+            self.extract_enrl_history(row, row_id)
         elif caller == 'get_course_info':
             self.handle_select_course(row, row_id)
         elif caller in ['update_rec', 'pin', 'unpin'] and action in ('pin', 'unpin'):
@@ -269,9 +327,10 @@ class ActivityLogCleaner(object):
         :param row:
         :type row
         '''
+        row_id = row[ID_POS]
         if type(row) == list:
             activity_tuple = (
-            	row[ID_POS], 
+            	row_id,
             	row[EMPLID_POS],
             	row[IP_ADDRESS_POS],
             	row[CALLER_POS],
@@ -283,28 +342,140 @@ class ActivityLogCleaner(object):
             activity_tuple = row
             
         self.buffer(self.activity_buf, activity_tuple)
+        # Fill a row in the IpLocation table
+        ip_loc_tuple = self.ip_dict.get(row[IP_ADDRESS_POS], 
+                                        default=self.DEFAULT_IPLOC_TUPLE)
+        self.buffer(self.ip_location_buf, (row_id,) + ip_loc_tuple)
 
     #------------------------------------
     # extract_pins
     #-------------------
     
-    def extract_pins_and_hist(self, row, row_id):
+    def extract_pins(self, row, row_id):
+        '''
+        Extract the 'currently-pinned' strm and crs_id nums.
+        Over time the format changed. There are two varieties:
+        
+        Early variety:
+            ...\t...\t{pinned:{1156:208582, 1162:120904},...\t 
+        
+        Later variety:
+            ...\t"pinned_courses"=>[#<Enrollment STRM: 1214, CLASS_NBR: 25600, CRSE_ID: 204608, 
+                                       CATALOG_NBR: "151", SUBJECT: "ARCHLGY", 
+                                       DESCRIPTION: "Ten Things: An Archaeology of Design ...">, 
+                                    #<Enrollment STRM: 1214, CLASS_NBR: 18259, CRSE_ID: 105670, 
+                                       CATALOG_NBR: "140", SUBJECT: "CS", 
+                                       DESCRIPTION: "Operating Systems and Systems Programming">,
+                                       ...
+                                    ] 
+        we try both for each row (sigh...)
+        
+        For the later variety we go in two steps: get
+        the above-shown list out of the row. Then pick
+        out STRM and CRSE_ID. 
+        
+        :param row:
+        :type row:
+        :param row_id:
+        :type row_id:
+        '''
+
+        # Avoid creating new strings from the row
+        mv = memoryview(bytes(row[ENVIRONMENT_POS], 'utf8'))
+        
+        match_early_var = self.context_pinned_early_var_pat.search(mv)
+        if match_early_var is not None:
+            self._clean_pins(row_id, match_early_var, 'early_var_res')
+            return
+        # Try the late variety:
+        match_late_var = self.context_pinned_late_var_phase1_pat.search(mv)
+        if match_late_var is not None:
+            self._clean_pins(row_id, match_late_var, 'late_var_res')
+        return
+
+    #------------------------------------
+    # _clean_pins
+    #-------------------
+
+    def _clean_pins(self, row_id, match_obj, match_type):
+        '''
+        Called when pins were provided as part of an activity. 
+        The match type is either 'early_var_res' or 'late_var_res'.
+        Early varieties look like:
+        
+            b'1156:208582, 1162:120904, ...'
+        
+        while late varieties look like:
+        
+            [#<Enrollment STRM: 1214, CLASS_NBR: 25600, CRSE_ID: 204608, 
+                CATALOG_NBR: "151", SUBJECT: "ARCHLGY", 
+                DESCRIPTION: "Ten Things: An Archaeology of Design ...">, 
+             #<Enrollment STRM: 1214, CLASS_NBR: 18259, CRSE_ID: 105670, 
+                CATALOG_NBR: "140", SUBJECT: "CS", 
+                DESCRIPTION: "Operating Systems and Systems Programming">,
+                ...
+             ]
+        
+        Either way, we create a triplet for each pin:
+        
+               (row_id, strm, crs_id)
+
+        The match object is known to be non-None, and group(1) will
+        contain the finding:
+        
+        :param row_id:
+        :type row_id:
+        :param match_obj:
+        :type match_obj:
+        :param match_type:
+        :type match_type:
+        '''
+        if match_type == 'early_var_res':
+            for strm_crs_id_pair in match_obj.group(1).split(b','):
+                if len(strm_crs_id_pair) > 0:
+                    try:
+                        strm, crs_id = strm_crs_id_pair.split(b':')
+                    except ValueError as _e:
+                        self.log.err(f"Could not split strm from crs_id in {match_obj.group(1)}") 
+                    self.buffer(self.pins_in_context_buf, (row_id, int(strm), int(crs_id)))
+            return
+        else:
+            # Must proceed in two steps. First, pick out
+            # all the STRM and CRSE_ID number pairs:
+
+            # Get: 
+            #   [(b'1214', b'204608'), (b'1214', b'105670'), (b'1214', b'105687'), ...]
+            res_list = self.context_pinned_late_var_phase2_pat.findall(match_obj.group(1))
+            if res_list is None:
+                return
+            # Create the triplets, and buffer them:
+            for strm, crs_id in res_list:
+                self.buffer(self.pins_in_context_buf, (row_id, int(strm), int(crs_id)))
+
+    #------------------------------------
+    # extract_enrl_history
+    #-------------------
+    
+    def extract_enrl_history(self, row, row_id):
         
         mv = memoryview(bytes(row[ENVIRONMENT_POS], 'utf8'))
-        match = self.pins_and_enroll_hist_pat.search(mv)
-        # Group 1 will be like: 
-        #   '1156:208582, 1162:120904'
-        for strm_crs_id_pair in match.group(1).split(b','):
-            if len(strm_crs_id_pair) > 0:
-                try:
-                    strm, crs_id = strm_crs_id_pair.split(b':')
-                except ValueError as _e:
-                    self.log.err(f"Could not split strm from crs_id in {match.group(1)}") 
-                self.buffer(self.pins_in_context_buf, (row_id, int(strm), int(crs_id)))
-    
-        # Group 2 is a simple list of crs_id ints:
-        if len(match.group(2)) > 0:
-            self.buffer_int_arr(self.enrl_hist_buf, row_id, match.group(2))
+        # Try the early-version log format:
+        
+        crs_id_match = self.context_enrl_hist_early_pat.search(mv)
+        if crs_id_match is not None:
+            self.buffer_int_arr(self.enrl_hist_buf, row_id, crs_id_match.group(1))
+            
+        else:
+            # Try later form:
+            crs_id_envs_match = self.context_enrl_hist_late_phase1_pat.search(mv)
+            if crs_id_envs_match is None:
+                return
+            # Pick the CRSE_ID nums out of the environment objs.
+            # Result will be [b'123456', b'789012, ...]
+            crse_id_arr_of_bstrings = self.context_enrl_hist_late_phase2_pat.findall(crs_id_envs_match.group(1))
+            int_arr = [int(el) for el in crse_id_arr_of_bstrings]
+            self.buffer_int_arr(self.enrl_hist_buf, row_id, int_arr)
+
 
     #------------------------------------
     # extract_course_select
@@ -516,39 +687,31 @@ class ActivityLogCleaner(object):
         When buffer is full as per DB_BATCH_SIZE_BIG, all 
         buffers are written to the database, and are emptied.
         
+        Example for simple_arr:
+           b'[102794, 105644, 105645, 105649]'
+        or:
+           [102794, 105644, 105645, 105649]  
+        
         :param buf:
         :type buf:
         :param row_id,
         :type row_id,
-        :param simple_arr:
-        :type simple_arr:
+        :param simple_arr: bin string containing a list of ints,
+            or a list of ints
+        :type simple_arr: {b[int] | [int]}
         '''
+
+        # Turn the bin str into an array of int.
+        #    b'[102794, 105644, 105645, 105649]'
+        # => [102794, 105644, 105645, 105649]
+        if type(simple_arr) == bytes:
+            int_arr = eval(simple_arr)
+        else:
+            int_arr = simple_arr
 
         # For each element of simple_arr, create a tuple
         # [row_id, arrayElement], and append that to the
         # buffer:
-        
-        int_len = 0
-        for asc_val in simple_arr[1:]:
-            if asc_val in range(ord('0'), ord('9')+1):
-                int_len += 1
-            else:
-                break
-            
-        inter_int_width = 0
-        for asc_val in simple_arr[int_len+1:]:
-            if asc_val not in range(ord('0'), ord('9')+1):
-                inter_int_width += 1
-            else:
-                break
-
-        int_arr = []
-        for int_start in range(1, len(simple_arr) , int_len+inter_int_width):
-            try:
-                int_arr.append(int(simple_arr[int_start:int_start+int_len]))
-            except ValueError:
-                # Likely end of numbers
-                break
 
         if len(int_arr) > 0:
             buf.extend(list(map(lambda arr_el: (row_id, arr_el), int_arr)))
@@ -636,6 +799,18 @@ class ActivityLogCleaner(object):
                                          'instructor' : 'varchar(40)'
                                          })
             
+        elif tbl_nm == 'IpLocation':
+            self.db.createTable(tbl_nm, {'row_id' : 'int',
+                                         'country_code' : 'varchar(2)',
+                                         'country' : 'varchar(60)',
+                                         'state' : 'varchar(100)',
+                                         'city' : 'varchar(100)',
+                                         'lat' : 'varchar(40)',
+                                         'longitude' : 'varchar(40)',
+                                         'zip' : 'varchar(20)', 
+                                         'time_zone' : 'varchar(10)',
+                                         'country_phone' : 'varchar(5)', 
+                                         'area_code' : 'varchar(40)'})
         # I prefer MyISAM engine:
         self.db.execute(f"ALTER TABLE {tbl_nm} engine=MyISAM;")
         
@@ -847,3 +1022,4 @@ if __name__ == '__main__':
     #                   db_pwd='',  # ******Remove
     #                   start_fresh=True
     #                   )
+

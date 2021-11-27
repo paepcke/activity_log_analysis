@@ -18,6 +18,7 @@ setup(
     setup_requires   = ['pytest-runner'],
     install_requires = ['pymysql-utils>=2.1.5',
                         'logging-singleton>=1.0',
+                        'explorecourses>=1.0.6',
                         ],
 
     tests_require    =[
