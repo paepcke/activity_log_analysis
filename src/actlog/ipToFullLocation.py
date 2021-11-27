@@ -107,7 +107,7 @@ class IpFullLocation:
                 cur_dir,
                 'data/DB15-IP-COUNTRY-REGION-CITY-LATITUDE-LONGITUDE-ZIPCODE-TIMEZONE-AREACODE_CommercialLicense.CSV.ZIP')
             if not os.path.exists(ipTablePath):
-                self.log.err("Could not load dicts from pickle, nor csv file. Quitting")
+                self.log.err(f"Could not load dicts from pickle, nor csv file at {ipTablePath}. Quitting")
                 sys.exit(1)
 
         # Have path to (possibly zipped) csv file: find
