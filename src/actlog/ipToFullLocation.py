@@ -105,7 +105,7 @@ class IpFullLocation:
             # No pickled dicts available, read from (possibly zipped) csv file:
             ipTablePath  = os.path.join(
                 cur_dir,
-                'data/DB15-IP-COUNTRY-REGION-CITY-LATITUDE-LONGITUDE-ZIPCODE-TIMEZONE-AREACODE_CommercialLicense.CSV.ZIP')
+                '../../data/DB15-IP-COUNTRY-REGION-CITY-LATITUDE-LONGITUDE-ZIPCODE-TIMEZONE-AREACODE_CommercialLicense.CSV.ZIP')
             if not os.path.exists(ipTablePath):
                 self.log.err(f"Could not load dicts from pickle, nor csv file at {ipTablePath}. Quitting")
                 sys.exit(1)
