@@ -42,41 +42,57 @@ The activity categories that are likely of interest are:
 
 ## Pinning-Related Tables
 
-The *Pin* and *Unpin* tables contain the course being handled. The quarters during which the respective pin/unpin actions occurred are available only via the *created_at* column of the *Activities* table. Again, to obtain information about the action associated with a particular pin in this table, use the *row_id* key to find information such as the date of the pin, the visitor hash, and more.
+The *Pin* and *Unpin* tables contain the course being handled. The quarters during which the respective pin/unpin actions occurred are available only via the *created_at* column of the *Activities* table. Again, to obtain information about the action associated with a particular pin in this table, use the *row_id* key to find information such as the date of the pin, the visitor hash, and more. You are only concerned with this fact for access methods other than the natural language queries, which make that connection themselves. For the SQLers among you:
 
-Some actions contain a list of all courses pinned during the action. Those 'contextual' pins are available in the 'ContextPins' table, which does include the quarter in which the pin occurred.
+
+Given *Pins* table entry:
+
+| Column Name   |  Example Entry |
+|---------------|----------------|
+| row_id        | 10354          |
+| crs_id        | 105670         |
+
+You could find out more via:
+
+```
+select * from Activities where row_id = 10354;
++--------+----------+---------------+-------------+-----------+---------------------+---------------------+
+| row_id | student  | ip_addr       | category    | action_nm | created_at          | updated_at          |
++--------+----------+---------------+-------------+-----------+---------------------+---------------------+
+|  10354 | $2b$1... | 10.31.192.169 | find_search | search    | 2015-10-26 01:18:11 | 2015-10-26 01:18:11 |
+|  10354 | $2b$1... | 10.31.192.169 | find_search | search    | 2015-10-26 01:18:11 | 2015-10-26 01:18:11 |
++--------+----------+---------------+-------------+-----------+---------------------+---------------------|
+```
+
+Some actions contain a list of all courses pinned during the action. Those 'contextual' pins are available in the *ContextPins* table, which does include the quarter in which the pin occurred. It is structured just like the *Pins* table.
 
 ## Search-Related Tables
 
 Only searches in the Carta course search box at the top of the interface are included in the *CrseSearchs* table. The table contains the search terms used. The action time in the associated *Activities* table *created_at* rows refer to the start of the visitor typing.
 
-The *InstructorLookups* table contains the names of instructors for whom searches were entered in the search box at the top.
+The *InstructorLookups* table contains the names of instructors for whom searches were entered in the search box at the top. Like this example:
+
+| row_id | search_term |
+|--------|-------------|
+|   1158 | physics 41a |
+|   1197 | spanlang 2a |
++--------+-------------+
 
 ## Enrollment
 
-The best source for enrollment continues to be the *student_enrollment* table in the Carta main database. However, as for pins, a number of actions include the enrollment history of the acting visitor. the *EnrollmentHist* table contains those context history lists.
+The best source for enrollment continues to be the *student_enrollment* table in the Carta main database. However, like for pins, a number of actions include the enrollment history of the acting visitor. the *EnrollmentHist* table contains those context history lists. These three entries from the *EnrollmentHist* table say "the visitor of action with *row_id* 10 in the *Activities* table was enrolled in three courses at the time they executed the logged action":
+
+| row_id | crs_id |
+|--------|--------|
+|      10 | 102794 |
+|      10 | 105644 |
+|      10 | 105645 |
 
 ## Auxiliary tables
 
-The *CourseInfo* table contains information about each course, keyed by the *crse_id*: 
+As seen in Figure 1, two tables external to the activity log information make queries more informative.
 
-The *Pin* and *Unpin* tables contain the course being handled. The quarters during which the respective pin/unpin actions occurred are available only via the *created_at* column of the *Activities* table. Again, to obtain information about the action associated with a particular pin in this table, use the *row_id* key to find information such as the date of the pin, the visitor hash, and more.
-
-Some actions contain a list of all courses pinned during the action. Those 'contextual' pins are available in the 'ContextPins' table, which does include the quarter in which the pin occurred.
-
-## Search-Related Tables
-
-Only searches in the Carta course search box at the top of the interface are included in the *CrseSearchs* table. The table contains the search terms used. The action time in the associated *Activities* table *created_at* rows refer to the start of the visitor typing.
-
-The *InstructorLookups* table contains the names of instructors for whom searches were entered in the search box at the top.
-
-## Enrollment
-
-The best source for enrollment continues to be the *student_enrollment* table in the Carta main database. However, as for pins, a number of actions include the enrollment history of the acting visitor. the *EnrollmentHist* table contains those context history lists.
-
-## Auxiliary tables
-
-The *CourseInfo* table contains information about each course, keyed by the *crse_id*:
+There an example from the *CourseInfo* table:
 
 | Column Name          Example Entry
 | ----------------- | ---------------------- |
@@ -93,7 +109,7 @@ The *CourseInfo* table contains information about each course, keyed by the *crs
 | acad_org          | AEROASTRO |
 
 
-The *IpLocation* table includes information obout internet protocol address locations. This information is primarily of interest for summer and Covid-time visits to the site.
+The *IpLocation* table includes information obout internet protocol address locations. This information is primarily of interest for summer and Covid-time visits to the Carta site. During normal times most visitors will be located at Stanford.
 
 | Column Name        | Example Entry
 |--------------------|-----------------|
@@ -109,6 +125,7 @@ The *IpLocation* table includes information obout internet protocol address loca
 | country_phone | 1 |
 |     area_code | 650 |
 
+Again, the natural language query facility is set up to make connections with the *crs_id* of the *CourseInfo* table, and the *row_id* of the *IpLocation* table automatic.
 
 ## NQL Getting Started
 
@@ -130,8 +147,8 @@ to get a time series line chart. If a barchart is prefered, one could continue w
 
 If you are familiar with using Tableau Desktop, worksheets evolving from the queries can be downloaded and then developed futher. Similarly, the data involved in a visualization can be downloaded to CSV for processing in R or Python.
 
-The interface is organized into *lenses*, which hide tables or fields to focus attention on just one analysis task.  The lenses are human-created, and can be changed. The above mentioned synonyms are associated with lenses.
+The NQL interface is organized into *lenses*, which hide tables or fields unimportant to particular analysis tasks to help the analyst focus attention on just one inquiry.  The lenses are human-created, and can be changed. The above mentioned synonyms are associated with lenses. That is, each analysis task can have its own set of synonyms.
 
-The change lens, go back to the [initial
+The change which lens to use, or to work in the NLQ using all tables at once, go back to the [initial
 URL](https://us-west-2b.online.tableau.com/#/site/paepcke/datasources/15217696/askData).
 
