@@ -213,9 +213,12 @@ class ActivityLogCleaner(object):
         else:
             open_func = open
         
+        # For timing printouts of number of records processed:
         prev_sign_of_life = int(time.time())
         
+        # Open the activity log CSV or CSV.ZIP:
         with open_func(activity_log_path, 'rt') as fd:
+            # Process a row at a time:
             reader = csv.reader(fd, delimiter='\t')
             _header = next(reader)
             for row in reader:
@@ -235,8 +238,53 @@ class ActivityLogCleaner(object):
             self.db.close()
             # Break out of the inline progress report:
             print()
-            self.log.info(f"Processed {self.cur_id} records.")
-            self.log.info(f"Search term over {self.MAX_SEARCH_TERM_LEN} chars: {self.truncated_search_terms}")
+            self.log.info(f"Imported {self.cur_id} records.")
+
+        # Create indexing:
+        self.log.info("Creating indexes on row_id for ...")
+        self.log.info("Activities ...")
+        self.db.execute("CREATE INDEX row_id_idx ON Activities(row_id)")
+        self.log.info("ContextPins ...")
+        self.db.execute("CREATE INDEX row_id_idx ON ContextPins(row_id);")
+        self.log.info("CrseSearches ...")
+        self.db.execute("CREATE INDEX row_id_idx ON CrseSearches(row_id);")
+        self.log.info("CrseSelects ...")
+        self.db.execute("CREATE INDEX row_id_idx ON CrseSelects(row_id);")
+        self.log.info("EnrollmentHist ...")
+        self.db.execute("CREATE INDEX row_id_idx ON EnrollmentHist(row_id);")
+        self.log.info("InstructorLookups ...")
+        self.db.execute("CREATE INDEX row_id_idx ON InstructorLookups(row_id);")
+        self.log.info("Pins ...")
+        self.db.execute("CREATE INDEX row_id_idx ON Pins(row_id);")
+        self.log.info("UnPins ...")
+        self.db.execute("CREATE INDEX row_id_idx ON UnPins(row_id);")
+        self.log.info("IpLocation ...")
+        self.db.execute("CREATE INDEX row_id_idx ON IpLocation(row_id);")
+        
+        self.log.info("Creating indexes on crs_id for ...")
+        self.log.info("ContextPins ...")
+        self.db.execute("CREATE INDEX crs_id_idx ON ContextPins(crs_id);")
+        self.log.info("CourseInfo ...")
+        self.db.execute("CREATE INDEX crs_id_idx ON CourseInfo(crs_id);")
+        self.log.info("CrseSelects ...")
+        self.db.execute("CREATE INDEX crs_id_idx ON CrseSelects(crs_id);")
+        self.log.info("EnrollmentHist ...")
+        self.db.execute("CREATE INDEX crs_id_idx ON EnrollmentHist(crs_id);")
+        self.log.info("Pins ...")
+        self.db.execute("CREATE INDEX crs_id_idx ON Pins(crs_id);")
+        self.log.info("UnPins ...")
+        self.db.execute("CREATE INDEX crs_id_idx ON UnPins(crs_id);")
+        
+        self.log.info("Creating indexes on subject for ...")
+        self.log.info("SubjSchoolSubschoolDep ...")
+        self.db.execute("CREATE INDEX subj_idx ON SubjSchoolSubschoolDep(subject);")
+        self.log.info("CourseInfo ...")
+        self.db.execute("CREATE INDEX subj_idx ON CourseInfo(subject);")
+        
+        self.log.info("Creating index on created_at for Activities...")
+        self.db.execute("CREATE INDEX created_at_idx ON Activities(created_at);")
+        self.log.infor("Done indexing")
+
 
     #------------------------------------
     # process_one_row
