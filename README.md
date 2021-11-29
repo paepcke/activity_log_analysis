@@ -134,15 +134,15 @@ NLQ does not process complicated language. The processor uses the table and colu
 
 Queries may build on each other. For example:
 
-    "How many Students?"
+    How many Students?
 
 produces the number of courses mentioned in the log. One might continue with:
 
-    "by Year"
+    by Year
 
 to get a time series line chart. If a barchart is prefered, one could continue with:
 
-    "as a barchart"
+    as a barchart
 
 The NQL interface is organized into *lenses*, which hide tables or fields unimportant to particular analysis tasks to help the analyst focus attention on just one inquiry.  The lenses are human-created, and can be changed. The above mentioned synonyms are associated with lenses. That is, each analysis task can have its own set of synonyms.
 
@@ -174,7 +174,7 @@ Tableau's NLQ is still being developed, and can be finicky.
        not City Aachen
     Students by Country
        exclude India
-       <pull down the "filter Abc Country to India and select Germany>
+       <pull down the "filter Abc Country to India," and select Germany>
        <pull down again and uncheck India>
     How many students
        by Country
@@ -193,4 +193,14 @@ Tableau's NLQ is still being developed, and can be finicky.
     CrseSearches
        filter Search Term "english"
 
+# Database Access
+
+The authoritative source of data are the DB tables in MySQL on quintus.stanford.edu. Those with an account on that DB server can either login via the command line:
+
+```
+mysql -h quintus.stanford.edu -u <uname> -p activity_log
+```
+
+If you are outside the Stanford network, you will need to VPN in first. For Sequel Pro users, Figure 2 shows the proper connection setup.
+![SequelPro](readme_figs/mysqlQuintusSQLProScreenshot.png).
 
