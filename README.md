@@ -11,7 +11,6 @@ The following access methods are available to analysts, in order of *time to ski
 - Python/R access to the set of underlying database tables
 - SQL access to the database tables
 
-
 The natural language access is organized by analysis focus, such as origin and nature of an action, pinning and unpinning, enrollment, etc. Questions may include *"How many students?"* *"Pinned courses over time"*. *"Top 10 enrollments*". An [online tutorial](https://www.youtube.com/watch?v=27aIgkNyVa0) provides an in-depth introcudtion to this *Ask Data* facility. A [short getting-started section](#nql_getting_started] is provided below. The [NLQ access is available via the Web](https://us-west-2b.online.tableau.com/#/site/paepcke/datasources/15217696/askData).
 
 The data from the activity log have been supplemented by information from Explore Courses, and location information by internet protocol address. These additional data are integrated in the activity datascape.
@@ -131,24 +130,67 @@ Again, the natural language query facility is set up to make connections with th
 
 Tableau's natural language query facility is relatively new. All Carta activity tables have been [introduced into Tableau Ask Data](https://us-west-2b.online.tableau.com/#/site/paepcke/datasources/15217696/askData), and uploaded to a server where natural language queries are available.
 
-NLQ does not process complicated language. The processor uses the table and column names, as well as some understanding of statistics and visualization style smarts to make sense of text that users type. That said, we introduce synonyms, so that alternative vocabulary will work as well. Rather than having to use 'crse_id,' which is an integer denoting a course, one can use the word 'course' instead.  Thus, "How many crse_id" produces the same result as "How many courses?"
+NLQ does not process complicated language. The processor uses the table and column names, as well as some understanding of statistics and visualization style smarts to make sense of text that users type. That said, we introduced synonyms, so that alternative vocabulary will work as well. Rather than having to use 'crs_id in table CrseSelects,' which is an integer denoting a course, one can use the word 'course' instead.
 
 Queries may build on each other. For example:
 
-    "How many courses?"
+    "How many Students?"
 
 produces the number of courses mentioned in the log. One might continue with:
 
-    "by year"
+    "by Year"
 
 to get a time series line chart. If a barchart is prefered, one could continue with:
 
-    "as barchart"
-
-If you are familiar with using Tableau Desktop, worksheets evolving from the queries can be downloaded and then developed futher. Similarly, the data involved in a visualization can be downloaded to CSV for processing in R or Python.
+    "as a barchart"
 
 The NQL interface is organized into *lenses*, which hide tables or fields unimportant to particular analysis tasks to help the analyst focus attention on just one inquiry.  The lenses are human-created, and can be changed. The above mentioned synonyms are associated with lenses. That is, each analysis task can have its own set of synonyms.
 
 The change which lens to use, or to work in the NLQ using all tables at once, go back to the [initial
 URL](https://us-west-2b.online.tableau.com/#/site/paepcke/datasources/15217696/askData).
+
+If you are familiar with using Tableau Desktop, worksheets evolving from the queries can be downloaded and then developed futher. From within Tableau Desktop they can be downloaded to CSV for processing in R or Python. This means you'll need to get a free-for-EDU copy of Tableau Desktop.
+
+### Tips and Cautions
+
+Tableau's NLQ is still being developed, and can be finicky. 
+
+- The best advice is to pay attention to the menus that pop down as you enter questions. Notice the table and fields to which each offer in the menu refers. You can consult the list of tables and fields on the left for the choice most likely to succeed.
+- Note the pulldown menu on the upper right of the visualization pane. You can easily change to an alternative viz.
+- Each question is shown in more stylized terms above the question box. Check those terms to see whehter the system grasped your intent. You can often pull down the boxes of the individual terms and reveal alterntives for you to choose, such as adding or removing from filters.
+- Map Viz pulldown: Map, Text Table
+- Country/City are based on the IP address of the Carta visitor, *not* from any university table.
+- To pan maps: hold left mouse button for a couple of seconds, then move the mouse. Without the wait the move will result in a selection on the map.
+
+### Example queries in the Course Search lens
+
+    How many students by year?
+       as barchart
+    Activities by city
+       <pull down viz menu on the upper right and select Text Table>
+    Number of students by city
+       filter City Aachen
+       <remove the 'filter Aachen'>
+       not City Aachen
+    Students by Country
+       exclude India
+       <pull down the "filter Abc Country to India and select Germany>
+       <pull down again and uncheck India>
+    How many students
+       by Country
+       by Year
+       <pull Viz menu near upper right; select Map>
+    CrseSelects by Gers
+       <Always pick the CrseSelects option for Gers> in the pull-down menu>
+       Gers(CourseInfo1) contains "WAY-FR"
+    Instructors
+       by year
+       <select Text Table from Viz selection pulldown>
+       <left click on one of the Year column headers and select sort-by-down symbol>
+    top 10 Instructors
+       by Year
+
+    CrseSearches
+       filter Search Term "english"
+
 
