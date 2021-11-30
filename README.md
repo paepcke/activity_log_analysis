@@ -129,6 +129,7 @@ Again, the natural language query facility is set up to make connections with th
 ## NQL Getting Started
 
 Tableau's natural language query facility is relatively new. All Carta activity tables have been [introduced into Tableau Ask Data](https://us-west-2b.online.tableau.com/#/site/paepcke/datasources/15217696/askData), and uploaded to a server where natural language queries are available.
+[A brief written tutorial](https://help.tableau.com/current/pro/desktop/en-us/ask_data.htm), and [tutorial videos](https://www.youtube.com/watch?v=27aIgkNyVa0) are available.
 
 NLQ does not process complicated language. The processor uses the table and column names, as well as some understanding of statistics and visualization style smarts to make sense of text that users type. That said, we introduced synonyms, so that alternative vocabulary will work as well. Rather than having to use 'crs_id in table CrseSelects,' which is an integer denoting a course, one can use the word 'course' instead.
 
