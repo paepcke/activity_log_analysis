@@ -166,23 +166,35 @@ Tableau's NLQ is still being developed, and can be finicky.
 
     How many students by year?
        as barchart
-    Activities by city
-       <pull down viz menu on the upper right and select Text Table>
-    Number of students by city
-       filter City Aachen
-       <remove the 'filter Aachen'>
-       not City Aachen
+
+![](readme_figs/studentsByYear.png)
+
     Students by Country
        exclude India
        <pull down the "filter Abc Country to India," and select Germany>
        <pull down again and uncheck India>
+
+![](readme_figs/studentsByCountry.png)
+
+    Activities by city
+       <pull down viz menu on the upper right and select Text Table>
+
+    Number of students by city
+       filter City Aachen
+       <remove the 'filter Aachen'>
+       not City Aachen
+
     How many students
        by Country
        by Year
        <pull Viz menu near upper right; select Map>
+
     CrseSelects by Gers
        <Always pick the CrseSelects option for Gers> in the pull-down menu>
        Gers(CourseInfo1) contains "WAY-FR"
+
+![](readme_figs/gers.png)
+
     Instructors
        by year
        <select Text Table from Viz selection pulldown>
