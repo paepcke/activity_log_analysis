@@ -36,6 +36,8 @@ BROWSER_POS = 8
 CREATED_AT_POS = 9
 UPDATED_AT_POS = 10
 
+#****** WRITE DROP TABLES
+
 class ActivityLogCleaner(object):
     '''
     classdocs
@@ -121,7 +123,7 @@ class ActivityLogCleaner(object):
         self.log = LoggingService()
 
         self.db_user = db_user
-
+        
         # The data for each action type is accumulated
         # in a separate buffer, and pushed down into a
         # corresponding table when the buffer is full. 
@@ -199,14 +201,14 @@ class ActivityLogCleaner(object):
         # Currently searching emplid:
         self.crs_search_state = None
         
-        self.log.info("Loading IP locations...")
-        self.ip_dict = IpFullLocation()
-        self.log.info("Done loading IP locations.")
-
         if unittesting:
             return
         
         self.db = self.open_db(uname=self.db_user, pwd=db_pwd, start_fresh=start_fresh)
+
+        self.log.info("Loading IP locations...")
+        self.ip_dict = IpFullLocation()
+        self.log.info("Done loading IP locations.")
 
         if self.is_gzipped(activity_log_path):
             open_func = gzip.open
@@ -243,7 +245,7 @@ class ActivityLogCleaner(object):
         # Create indexing:
         self.log.info("Creating indexes on row_id for ...")
         self.log.info("Activities ...")
-        self.db.execute("CREATE INDEX row_id_idx ON Activities(row_id)")
+        self.db.execute("CREATE UNIQUE INDEX row_id_idx ON Activities(row_id)")
         self.log.info("ContextPins ...")
         self.db.execute("CREATE INDEX row_id_idx ON ContextPins(row_id);")
         self.log.info("CrseSearches ...")
@@ -378,11 +380,11 @@ class ActivityLogCleaner(object):
         row_id = row[ID_POS]
         if type(row) == list:
             activity_tuple = (
-            	row_id,
-            	row[EMPLID_POS],
-            	row[IP_ADDRESS_POS],
-            	row[CALLER_POS],
-            	row[ACTION_POS],
+                row_id,
+                row[EMPLID_POS],
+                row[IP_ADDRESS_POS],
+                row[CALLER_POS],
+                row[ACTION_POS],
                 row[-2],
                 row[-1]
                 )
@@ -792,17 +794,42 @@ class ActivityLogCleaner(object):
             raise RuntimeError(f"Cannot access db for user {uname} db {self.DB_NAME}: {repr(e)}")
 
         self.db = db
-        
+
+        # Check whether Activities table exists, and 
+        # warn about wiping out all tables:
+        res_iter = db.query('''SELECT COUNT(*)
+                          FROM information_schema.tables 
+                          WHERE table_schema = DATABASE()
+                          AND table_name = "Activities";
+                          )
+                          ''')
+        activity_tbl_exists = next(res_iter)
+        try:
+            # Terminate the query iterator
+            # WTF is going on? Should not be needed,
+            # but otherwise bogus MySQL programming error
+            # on next query:
+            next(res_iter)
+        except Exception:
+            pass
+            
+        if activity_tbl_exists:
+            response = input("Tables already exist, wipe them? (y/n): ")
+            if response in ('y', 'Y'):
+                start_fresh = True
+            else:
+                start_fresh = False
+
         # Test whether all necessary tables exist:
         for tbl_nm, _cols in self.buffer_tables.values():
-            res = db.query(f'''SELECT COUNT(*)
+            res = next(db.query(f'''SELECT COUNT(*)
                                 FROM information_schema.tables 
                                WHERE table_schema = "{self.DB_NAME}"
                                  AND table_name = "{tbl_nm}";'''
-            )
-            if next(res) == 0:
+            ))
+            if res == 0:
                 self.create_tbl(tbl_nm)
-            
+
             # Truncate table if starting over:
             if start_fresh:
                 db.truncateTable(tbl_nm)
@@ -833,13 +860,25 @@ class ActivityLogCleaner(object):
                                          })
 
         elif tbl_nm == 'Activities':
+            self.db.execute('''CREATE TABLE Activities (
+                            row_id    : int NOT NULL,
+                            student   : varchar(100),
+                            ip_addr   : varchar(16),
+                            category  : varchar(30),
+                            action_nm : varchar(30),
+                            created_at: datetime,
+                            updated_at: datetime,
+                            PRIMARY KEY(row_id)
+                            ) engine=MyISAM
+                            '''
+            )
             self.db.createTable(tbl_nm, {'row_id'    : 'int',
                                          'student'   : 'varchar(100)',
                                          'ip_addr'   : 'varchar(16)',
                                          'category'  : 'varchar(30)',
                                          'action_nm' : 'varchar(30)',
                                          'created_at': 'datetime',
-                                         'updated_at': 'datetime'
+                                         'updated_at': 'datetime'       
                                          })
             
         elif tbl_nm == 'InstructorLookups':
@@ -861,7 +900,26 @@ class ActivityLogCleaner(object):
                                          'area_code' : 'varchar(40)'})
         # I prefer MyISAM engine:
         self.db.execute(f"ALTER TABLE {tbl_nm} engine=MyISAM;")
-        
+
+    #------------------------------------
+    # drop_tables
+    #-------------------
+    
+    def drop_tables(self):
+        '''
+        Drop all tables that get created 
+        from the activity log. 
+        '''
+
+        for tbl_nm, _cols in self.buffer_tables.values():
+            query = f'''SELECT COUNT(*)
+                          FROM information_schema.tables 
+                         WHERE table_schema = "{self.DB_NAME}"
+                           AND table_name = "{tbl_nm}";'''
+            tbl_exists = next(self.db.query(query))
+            if tbl_exists == 1:
+                self.db.dropTable(tbl_nm)
+                
     #------------------------------------
     # flush_buffer
     #-------------------
@@ -1070,4 +1128,3 @@ if __name__ == '__main__':
     #                   db_pwd='',  # ******Remove
     #                   start_fresh=True
     #                   )
-
