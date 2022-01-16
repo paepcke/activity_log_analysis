@@ -48,6 +48,18 @@ class ActivityLogCleaner(object):
     DB_NAME = 'activity_log'
     MAX_SEARCH_TERM_LEN = 2000
     
+    # Find: two capture groups from a search
+    # res: ('213685, 213686'), and
+    # ('[Alexei Entin, Andrew Endy, Claudia Engel]}')
+
+    SRC_RES_PAT = re.compile(r"^{results:\[([,0-9\s]*)\], instructor_results:(.*)")
+    
+    # Different type of search result:
+    # '{augmented_outputs:[{CRSE_ID:118599, STRM:1166,...'
+    # with several occurrences of the CRSE_ID:nnnnnn part.
+    # Use this pattern with findall():
+    SRC_AUG_RES_PAT = re.compile(r"CRSE_ID:([0-9]{6})")
+    
     DEFAULT_IPLOC_TUPLE = ('--',
                            'Country-Unknown',   # Country  
                            'State-Unknown',     # State/Province
@@ -176,7 +188,7 @@ class ActivityLogCleaner(object):
             self.unpins_buf : ('UnPins', ('row_id', 'crs_id')),
             self.pins_in_context_buf : ('ContextPins', ('row_id', 'quarter_id', 'crs_id')),
             self.crs_selects_buf : ('CrseSelects', ('row_id', 'crs_id')),
-            self.crs_search_buf : ('CrseSearches', ('row_id', 'search_term')),
+            self.crs_search_buf : ('CrseSearches', ('row_id', 'search_term', 'crs_res', 'instructor_res')),
             self.enrl_hist_buf : ('EnrollmentHist', ('row_id', 'crs_id')),
             self.instructor_lookup_buf : ('InstructorLookups', ('row_id', 'instructor')),
             self.ip_location_buf : ('IpLocation', 
@@ -223,9 +235,16 @@ class ActivityLogCleaner(object):
             # Process a row at a time:
             reader = csv.reader(fd, delimiter='\t')
             _header = next(reader)
+            prev_id = 0
             for row in reader:
                 try:
                     self.cur_id = int(row[ID_POS])
+                    # Guard against the gzipped file having
+                    # duplicates:
+                    if self.cur_id <= prev_id:
+                        continue
+                    else:
+                        prev_id = self.cur_id
                 except Exception as _e:
                     self.log.err(f"Row does not have a row id: {row}")
                     continue
@@ -321,7 +340,7 @@ class ActivityLogCleaner(object):
                 action != 'search'):
                 # Add the ongoing search action to the search buffer,
                 # and then continue to process the row:
-                self.commit_search_action()
+                self.commit_search_action(row)
             else:
                 # Keep collecting search term chars:
                 self.extract_find_search(row, row_id)
@@ -329,6 +348,7 @@ class ActivityLogCleaner(object):
 
         else:
             # Not in middle of search word typing:
+            #*******!!!!! find_search, search, no srch state yet
             self.add_activity_record(row)
 
         # Add other info contained in the row:
@@ -366,7 +386,7 @@ class ActivityLogCleaner(object):
     def add_activity_record(self, row):
         '''
         Add the main activity record, given either
-        a row as a list from the csv read, or a 
+        a row as a list from the csv read, or a tuple
         with the values:
             row[ID_POS], 
             row[EMPLID_POS],
@@ -598,7 +618,7 @@ class ActivityLogCleaner(object):
     # commit_search_action
     #-------------------
     
-    def commit_search_action(self):
+    def commit_search_action(self, row):
         '''
         Searching for courses often triggers multiple
         activity_log actions as the search term is typed in.
@@ -622,7 +642,7 @@ class ActivityLogCleaner(object):
 
         the tuple:
         
-             (row-id, search-term)
+             (row-id, search-term, crs_res, instructor_res)
               
         is added to the crs_search_buf, from where it is eventually
         filled into the db.
@@ -631,9 +651,32 @@ class ActivityLogCleaner(object):
         one search activity.
 
         '''
+        # Grab the 'OUTPUT' info, which consists of a dict
+        # with two keys, like:
+        #  
+        #     {results:[213685, 213686, 103259], 
+        #      instructor_results:[Alexei Entin, Andrew Endy, Claudia Engel]
+        #     }
+        out_dict_raw = row[OUTPUT_POS]
+        if out_dict_raw == 'NULL':
+            crse_res = None
+            instr_res = None
+        else:
+            out_info = self._parse_srch_res_output(out_dict_raw)
+            if out_info is None:
+                crse_res = None
+                instr_res = None
+            elif type(out_info) == dict:
+                crse_res = out_info['results']
+                instr_res = out_info['instructor_results']
+            elif type(out_info) == str:
+                crse_res = out_info
+                instr_res = None
         self.buffer(self.crs_search_buf, 
                     (self.crs_search_state['row_id'],
-                     self.search_term_accumulator
+                     self.search_term_accumulator,
+                     crse_res,
+                     instr_res
                      ))
         # Add the activity record for this now concluded
         # search:
@@ -856,30 +899,24 @@ class ActivityLogCleaner(object):
                                          })
         elif tbl_nm == 'CrseSearches':
             self.db.createTable(tbl_nm, {'row_id': 'int',
-                                         'search_term' : f'varchar({self.MAX_SEARCH_TERM_LEN})'
+                                         'search_term' : f'varchar({self.MAX_SEARCH_TERM_LEN})',
+                                         'crs_res' : 'text', 
+                                         'instructor_res' : 'text'
                                          })
 
         elif tbl_nm == 'Activities':
             self.db.execute('''CREATE TABLE Activities (
-                            row_id    : int NOT NULL,
-                            student   : varchar(100),
-                            ip_addr   : varchar(16),
-                            category  : varchar(30),
-                            action_nm : varchar(30),
-                            created_at: datetime,
-                            updated_at: datetime,
+                            row_id     int NOT NULL,
+                            student    varchar(100),
+                            ip_addr    varchar(16),
+                            category   varchar(30),
+                            action_nm  varchar(30),
+                            created_at datetime,
+                            updated_at datetime,
                             PRIMARY KEY(row_id)
                             ) engine=MyISAM
                             '''
             )
-            self.db.createTable(tbl_nm, {'row_id'    : 'int',
-                                         'student'   : 'varchar(100)',
-                                         'ip_addr'   : 'varchar(16)',
-                                         'category'  : 'varchar(30)',
-                                         'action_nm' : 'varchar(30)',
-                                         'created_at': 'datetime',
-                                         'updated_at': 'datetime'       
-                                         })
             
         elif tbl_nm == 'InstructorLookups':
             self.db.createTable(tbl_nm, {'row_id': 'int',
@@ -989,6 +1026,66 @@ class ActivityLogCleaner(object):
             except (gzip.BadGzipFile, OSError):
                 return False
 
+    #------------------------------------
+    # _parse_srch_res_output 
+    #-------------------
+
+    def _parse_srch_res_output(self, out_dict_str):
+        '''
+        Given a *string* that may have one of two formats
+        of search results:
+        
+        1. Simple list of course IDs plus list of instructors
+        2. List of dicts with course descriptions
+        
+	        First form:
+	           '{results:[213685, 213686], instructor_results:[Alexei Entin, Andrew Endy]}'
+	           in which both arrays are of arbitrary length.
+	           
+	   	       Extract the arrays into a dict:
+	   	          {
+	   	           'results' : '213685, 213686'
+	   	           'instructor_results' : 'Alexei Entin, Andrew Endy'
+	   	          }
+	   	    
+	   	    Second form:
+	            '{augmented_outputs:[{CRSE_ID:118599, STRM:1166, SUBJECT:GERLANG...},
+	                                 {CRSE_ID:128512, STRM:1166, SUBJECT:CS...},
+	                                          ...
+	                                 ]}'
+	            
+	           Extract only the course IDs  
+  
+        The string can be 'NULL', or something else entirely
+        
+        :param out_dict_str: raw input
+        :type out_dict_str: str
+        :returns dict of extracted content, if possible
+        :rtype: {None | {str : str}
+        '''
+        # Is it format 1?
+        match_obj = self.SRC_RES_PAT.match(out_dict_str)
+        if match_obj is not None:
+            the_ints = match_obj.groups[0]
+            # Get:
+            #  '[Alexei Entin, Andrew Endy]}'
+            the_names_raw = match_obj.groups[1]
+            the_names = the_names_raw[1:-2]
+            out_dict = {'results' : the_ints, 'instructor_results' : the_names}
+            return out_dict
+        
+        # Is it format 2? If so, the following finall()
+        # returns like ['118599', '201023']:
+        if out_dict_str.startswith('{augmented_outputs'):
+            crs_id_str_list = self.SRC_AUG_RES_PAT.findall(out_dict_str)
+            if len(crs_id_str_list) > 0:
+                # Turn ['123456', '123456'] into 
+                # '[123456, 123456]
+                crs_ids = str([int(crs_id_str) for crs_id_str in crs_id_str_list])
+                return crs_ids
+
+        return None
+        
 # ------------------------- BufferClass ----------------
 
 class BufferClass:
