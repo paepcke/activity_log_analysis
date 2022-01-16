@@ -912,6 +912,8 @@ class ActivityLogCleaner(object):
                 # Find last entry in activity log:
                 last_row_id = next(db.query("SELECT MAX(row_id) from activities"))
                 self.start_fresh = last_row_id
+        else:
+            self.start_fresh = False
 
         # Test whether all necessary tables exist:
         for tbl_nm, _cols in self.buffer_tables.values():
