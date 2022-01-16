@@ -118,8 +118,8 @@ class Test(unittest.TestCase):
 
         self.assertListEqual(search_entry.arr, expected)
         
-        row_id = actlog_cleaner.crs_search_state['row_id']
-        emplid = actlog_cleaner.crs_search_state['emplid']
+        row_id = actlog_cleaner.crs_search_states['row_id']
+        emplid = actlog_cleaner.crs_search_states['emplid']
         self.assertTupleEqual((row_id, emplid), (7, 'emplid2'))
         self.assertEqual(actlog_cleaner.search_term_accumulator, 'stats 4')
         

@@ -59,6 +59,19 @@ class ActivityLogCleaner(object):
     # with several occurrences of the CRSE_ID:nnnnnn part.
     # Use this pattern with findall():
     SRC_AUG_RES_PAT = re.compile(r"CRSE_ID:([0-9]{6})")
+
+    # Another form of search result:
+    #   '{results:[123456, 432165]}'
+    # with arbitrary number of 6-dig int entries. Use
+    # with findall():
+    SRC_SIMPLE_RES_LIST_PAT = re.compile(r"[0-9]{6}")
+
+    
+    # Another form of search result:
+    #   '{results:[#<Combo >, #<Combo >]}'
+    # with arbitrary number of Combo entries. Use
+    # with findall():
+    SRC_COMBO_RES_PAT = re.compile(r"#<Combo >")
     
     DEFAULT_IPLOC_TUPLE = ('--',
                            'Country-Unknown',   # Country  
@@ -209,9 +222,9 @@ class ActivityLogCleaner(object):
         # Accumulator for search terms as they are typed
         # to avoid too many db entries of the same search
         # activity:
-        self.search_term_accumulator = bytearray(50)
-        # Currently searching emplid:
-        self.crs_search_state = None
+        #******self.search_term_accumulator = bytearray(50)
+        # All the currently searching emplids:
+        self.crs_search_states = {}
         
         if unittesting:
             return
@@ -236,9 +249,20 @@ class ActivityLogCleaner(object):
             reader = csv.reader(fd, delimiter='\t')
             _header = next(reader)
             prev_id = 0
+            # Are we to pick up where we left off?
+            if type(self.start_fresh) == int:
+                # Yes, so skip the already-done rows:
+                for row in reader:
+                    if int(row[ID_POS]) < self.start_fresh:
+                        continue
             for row in reader:
                 try:
                     self.cur_id = int(row[ID_POS])
+                    
+                    # About 575 early entries have emplid == 0;
+                    # ignore those.
+                    if row[EMPLID_POS] == '0':
+                        continue
                     # Guard against the gzipped file having
                     # duplicates:
                     if self.cur_id <= prev_id:
@@ -320,24 +344,27 @@ class ActivityLogCleaner(object):
         # Check whether a search term is being typed in,
         # and the typing is done:
         
-        if self.crs_search_state is not None:
-            # Search done if either the cur activity
-            # is by a different site visitor, or the
-            # type of activity has changed away from
-            # search. self.crs_search_state is a dict:
+        try:
+            crs_search_state = self.crs_search_states[emplid]
+        except KeyError:
+            crs_search_state = None
+        if crs_search_state is not None:
+            # Already in accumulating search term characters.
+            # Search done if the student changed away from 
+            # searching.
+            # crs_search_state is a dict:
             #
-            #     {'row_id' : row_id, 
-            #      'emplid' : row[EMPLID_POS],
-            #      'ip_address' : row[IP_ADDRESS_POS],
-            #      'caller' : row[CALLER_POS],
-            #      'action' : row[ACTION_POS]
-            #      'created_at' : row[CREATED_AT_POS],
-            #      'updated_at' : row[UPDATED_AT_POS]
+            #     {'row_id' : ...
+            #      'emplid' : ...
+            #      'ip_address' : ...
+            #      'caller' : ...
+            #      'action' : ...
+            #      'created_at' : ...
+            #      'updated_at' : ...
+            #      'search_term_accumulator : <search term so far>
             #      }            
             
-            if (self.crs_search_state['emplid'] != emplid or \
-                caller != 'find_search' or \
-                action != 'search'):
+            if  caller != 'find_search' or action != 'search':
                 # Add the ongoing search action to the search buffer,
                 # and then continue to process the row:
                 self.commit_search_action(row)
@@ -584,12 +611,21 @@ class ActivityLogCleaner(object):
         :type row_id:
         '''
 
+        emplid = row[EMPLID_POS]
+
         # Get like: '{search_term_accumulator:cs 1}'
         search_snippet = row[KEY_PARAMETER_POS]
         search_term = self.search_term_pat.search(search_snippet).group(1)
         # Store the term as typed so far in the search term buffer:
-        self.search_term_accumulator = search_term[0:]
-        if self.crs_search_state is None:
+        search_term_so_far = search_term[0:]
+        cur_return_output  = row[OUTPUT_POS]
+        
+        try:
+            self.crs_search_states[emplid]['search_term_accumulator'] = search_term_so_far
+            self.crs_search_states[emplid]['output'] = cur_return_output
+        except KeyError:
+            # Search status does not exist yet:
+            
             # First letter a searching visitor has typed. 
             # Save the main activity info, it will be used
             # for the db record entry when typing has ended.
@@ -605,14 +641,17 @@ class ActivityLogCleaner(object):
             #   --------------------------^^^----------
             # Remove the extra element:
             
-            self.crs_search_state = {'row_id' : int(row_id), 
-                                     'emplid' : row[EMPLID_POS],
-                                     'ip_address' : row[IP_ADDRESS_POS],
-                                     'caller' : row[CALLER_POS],
-                                     'action' : row[ACTION_POS],
-                                     'created_at' : row[-2],
-                                     'updated_at' : row[-1]
-                                     }
+            self.crs_search_states[emplid] = {'row_id' : int(row_id), 
+                                        	 'emplid' : emplid,
+                                        	 'ip_address' : row[IP_ADDRESS_POS],
+                                        	 'caller' : row[CALLER_POS],
+                                        	 'action' : row[ACTION_POS],
+                                        	 'created_at' : row[-2],
+                                        	 'updated_at' : row[-1],
+                                             'search_term_accumulator' : search_term_so_far,
+                                             'output' : cur_return_output
+                                            }
+
 
     #------------------------------------
     # commit_search_action
@@ -628,17 +667,18 @@ class ActivityLogCleaner(object):
         method is called.
         
         Expectation:
-            o self.crs_search_state contains a a dict
+            o self.crs_search_states contains a a dict
                  {'row_id' : row_id, 
                   'emplid' : row[EMPLID_POS],
                   'ip_address' : row[IP_ADDRESS_POS],
                   'caller' : row[CALLER_POS],
                   'action' : row[ACTION_POS],
                   'created_at' : row[CREATED_AT_POS],
-                  'updated_at' : row[UPDATED_AT_POS]
+                  'updated_at' : row[UPDATED_AT_POS],
+                  'search_term_accumulator': <full search term>
                   }            
 
-            o self.search_term_accumulator contains the search term 
+               where search_term_accumulator contains the search term 
 
         the tuple:
         
@@ -647,41 +687,49 @@ class ActivityLogCleaner(object):
         is added to the crs_search_buf, from where it is eventually
         filled into the db.
         
-        the crs_search_state is set to None to signal the end of
+        the emplid's crs_search_state is set to None to signal the end of
         one search activity.
+        
+        Several formats of result outputs were added to activity_log
+        over the years:
+        
+            
 
         '''
+        emplid = row[EMPLID_POS]
         # Grab the 'OUTPUT' info, which consists of a dict
         # with two keys, like:
         #  
         #     {results:[213685, 213686, 103259], 
         #      instructor_results:[Alexei Entin, Andrew Endy, Claudia Engel]
         #     }
-        out_dict_raw = row[OUTPUT_POS]
+        out_dict_raw = self.crs_search_states[emplid]['output']
         if out_dict_raw == 'NULL':
             crse_res = None
             instr_res = None
         else:
             out_info = self._parse_srch_res_output(out_dict_raw)
-            if out_info is None:
+            if out_info is not None:
+                if type(out_info) == dict:
+                    crse_res = out_info['results']
+                    instr_res = out_info['instructor_results']
+                elif type(out_info) == str:
+                    crse_res = out_info
+                    instr_res = None
+            else:
                 crse_res = None
                 instr_res = None
-            elif type(out_info) == dict:
-                crse_res = out_info['results']
-                instr_res = out_info['instructor_results']
-            elif type(out_info) == str:
-                crse_res = out_info
-                instr_res = None
         self.buffer(self.crs_search_buf, 
-                    (self.crs_search_state['row_id'],
-                     self.search_term_accumulator,
+                    (self.crs_search_states[emplid]['row_id'],
+                     self.crs_search_states[emplid]['search_term_accumulator'],
                      crse_res,
                      instr_res
                      ))
         # Add the activity record for this now concluded
         # search:
-        self.add_activity_record(tuple(self.crs_search_state.values()))
-        self.crs_search_state = None
+        #****** SOURCE OF DUPLICATES! REMOVE WHEN SURE.
+        #*******self.add_activity_record(tuple(self.crs_search_states.values()))
+        del self.crs_search_states[emplid]
 
     #------------------------------------
     # handle_select_course
@@ -859,9 +907,11 @@ class ActivityLogCleaner(object):
         if activity_tbl_exists:
             response = input("Tables already exist, wipe them? (y/n): ")
             if response in ('y', 'Y'):
-                start_fresh = True
+                self.start_fresh = True
             else:
-                start_fresh = False
+                # Find last entry in activity log:
+                last_row_id = next(db.query("SELECT MAX(row_id) from activities"))
+                self.start_fresh = last_row_id
 
         # Test whether all necessary tables exist:
         for tbl_nm, _cols in self.buffer_tables.values():
@@ -874,7 +924,7 @@ class ActivityLogCleaner(object):
                 self.create_tbl(tbl_nm)
 
             # Truncate table if starting over:
-            if start_fresh:
+            if self.start_fresh == True:
                 db.truncateTable(tbl_nm)
 
         # No truncated, overlong search terms yet:
@@ -1032,7 +1082,7 @@ class ActivityLogCleaner(object):
 
     def _parse_srch_res_output(self, out_dict_str):
         '''
-        Given a *string* that may have one of two formats
+        Given a *string* that may have one of three formats
         of search results:
         
         1. Simple list of course IDs plus list of instructors
@@ -1056,6 +1106,15 @@ class ActivityLogCleaner(object):
 	            
 	           Extract only the course IDs  
   
+        3. Simple list of course IDs:
+              '{results:[215594, 215597, 215596]}'
+           arbitrary length.
+
+        4. Like 3., but instead of integers we get the 'result'
+           of Ruby evaluating some data structure:
+           
+                '{results:[#<Combo >, #<Combo >, #<Combo >, #<Combo >]}
+  
         The string can be 'NULL', or something else entirely
         
         :param out_dict_str: raw input
@@ -1066,10 +1125,10 @@ class ActivityLogCleaner(object):
         # Is it format 1?
         match_obj = self.SRC_RES_PAT.match(out_dict_str)
         if match_obj is not None:
-            the_ints = match_obj.groups[0]
+            the_ints = match_obj.groups()[0]
             # Get:
             #  '[Alexei Entin, Andrew Endy]}'
-            the_names_raw = match_obj.groups[1]
+            the_names_raw = match_obj.groups()[1]
             the_names = the_names_raw[1:-2]
             out_dict = {'results' : the_ints, 'instructor_results' : the_names}
             return out_dict
@@ -1080,10 +1139,26 @@ class ActivityLogCleaner(object):
             crs_id_str_list = self.SRC_AUG_RES_PAT.findall(out_dict_str)
             if len(crs_id_str_list) > 0:
                 # Turn ['123456', '123456'] into 
-                # '[123456, 123456]
+                # '[123456, 123456]'
                 crs_ids = str([int(crs_id_str) for crs_id_str in crs_id_str_list])
                 return crs_ids
 
+        # Is it format 3?
+        crs_id_list = self.SRC_SIMPLE_RES_LIST_PAT.findall(out_dict_str)
+        if len(crs_id_list) > 0:
+            # Turn ['123456', '543215'] into
+            #    '[123456, 543215]'
+            crs_ids = str([int(crs_id_str) for crs_id_str in crs_id_list])
+            return crs_ids 
+        
+        # Is it format 4?
+        combo_list = self.SRC_COMBO_RES_PAT.findall(out_dict_str)
+        if len(combo_list) > 0:
+            # Replace all the useless combo entries into 
+            # a list of crs_id 0, and make a string for storage:
+            crs_ids = str([0]*len(combo_list))
+            return crs_ids
+        
         return None
         
 # ------------------------- BufferClass ----------------
