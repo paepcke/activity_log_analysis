@@ -93,7 +93,7 @@ As seen in Figure 1, two tables external to the activity log information make qu
 
 There an example from the *CourseInfo* table:
 
-| Column Name          Example Entry
+| Column Name       |  Example Entry         |
 | ----------------- | ---------------------- |
 | crs_id            | Six-digit course ID; use to tie to tables, such as *CrseSelection* |
 | acad_yr           | 2015-2016 |
