@@ -282,46 +282,58 @@ class ActivityLogCleaner(object):
         self.log.info("Creating indexes on row_id for ...")
         self.log.info("ContextPins ...")
         self._index_if_not_exists('row_id_idx', 'ContextPins', 'row_id')
-        self.db.execute("CREATE INDEX row_id_idx ON ContextPins(row_id);")
+
         self.log.info("CrseSearches ...")
-        self.db.execute("CREATE INDEX row_id_idx ON CrseSearches(row_id);")
+        self._index_if_not_exists('row_id_idx', 'CrseSearches', 'row_id')
+        
         self.log.info("CrseSelects ...")
-        self.db.execute("CREATE INDEX row_id_idx ON CrseSelects(row_id);")
+        self._index_if_not_exists('row_id_idx', 'CrseSelects', 'row_id')
+
         self.log.info("EnrollmentHist ...")
-        self.db.execute("CREATE INDEX row_id_idx ON EnrollmentHist(row_id);")
+        self._index_if_not_exists('row_id_idx', 'EnrollmentHist', 'row_id')
+        
         self.log.info("InstructorLookups ...")
-        self.db.execute("CREATE INDEX row_id_idx ON InstructorLookups(row_id);")
+        self._index_if_not_exists('row_id_idx', 'InstructorLookups', 'row_id')
+        
         self.log.info("Pins ...")
-        self.db.execute("CREATE INDEX row_id_idx ON Pins(row_id);")
+        self._index_if_not_exists('row_id_idx', 'Pins', 'row_id')
+        
         self.log.info("UnPins ...")
-        self.db.execute("CREATE INDEX row_id_idx ON UnPins(row_id);")
+        self._index_if_not_exists('row_id_idx', 'UnPins', 'row_id')
+        
         self.log.info("IpLocation ...")
-        self.db.execute("CREATE INDEX row_id_idx ON IpLocation(row_id);")
+        self._index_if_not_exists('row_id_idx', 'IpLocation', 'row_id')
         
         self.log.info("Creating indexes on crs_id for ...")
         self.log.info("ContextPins ...")
-        self.db.execute("CREATE INDEX crs_id_idx ON ContextPins(crs_id);")
+        self._index_if_not_exists('crs_id_idx', 'ContextPins', 'crs_id')
+        
         self.log.info("CourseInfo ...")
-        self.db.execute("CREATE INDEX crs_id_idx ON CourseInfo(crs_id);")
+        self._index_if_not_exists('crs_id_idx', 'CourseInfo', 'crs_id')
+        
         self.log.info("CrseSelects ...")
-        self.db.execute("CREATE INDEX crs_id_idx ON CrseSelects(crs_id);")
+        self._index_if_not_exists('crs_id_idx', 'CrseSelects', 'crs_id')
+        
         self.log.info("EnrollmentHist ...")
-        self.db.execute("CREATE INDEX crs_id_idx ON EnrollmentHist(crs_id);")
+        self._index_if_not_exists('crs_id_idx', 'EnrollmentHist', 'crs_id')
+        
         self.log.info("Pins ...")
-        self.db.execute("CREATE INDEX crs_id_idx ON Pins(crs_id);")
+        self._index_if_not_exists('crs_id_idx', 'Pins', 'crs_id')
+        
         self.log.info("UnPins ...")
-        self.db.execute("CREATE INDEX crs_id_idx ON UnPins(crs_id);")
+        self._index_if_not_exists('crs_id_idx', 'UnPins', 'crs_id')
         
         self.log.info("Creating indexes on subject for ...")
         self.log.info("SubjSchoolSubschoolDep ...")
-        self.db.execute("CREATE INDEX subj_idx ON SubjSchoolSubschoolDep(subject);")
+        self._index_if_not_exists('subj_idx', 'SubjSchoolSubschoolDep', 'subject')
+
         self.log.info("CourseInfo ...")
-        self.db.execute("CREATE INDEX subj_idx ON CourseInfo(subject);")
+        self._index_if_not_exists('subj_idx', 'CourseInfo', 'subject')
         
         self.log.info("Creating index on created_at for Activities...")
-        self.db.execute("CREATE INDEX created_at_idx ON Activities(created_at);")
-        self.log.infor("Done indexing")
+        self._index_if_not_exists('created_at_idx', 'Activities', 'created_at')
 
+        self.log.infor("Done indexing")
 
     #------------------------------------
     # process_one_row
@@ -1037,8 +1049,8 @@ class ActivityLogCleaner(object):
                                            AND column_name = "{col_nm}";'''
             ))
         except StopIteration:
-            return
-        self.db.execute(f"CREATE INDEX {idx_nm} ON {tbl_nm}({col_nm});")
+            # Doesn't exist yet:
+            self.db.execute(f"CREATE INDEX {idx_nm} ON {tbl_nm}({col_nm});")
 
     #------------------------------------
     # flush_buffer
