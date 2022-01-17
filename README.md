@@ -15,9 +15,56 @@ The natural language access vocabulary is tied to the activity action, such as p
 
 The data from the activity log have been supplemented by information from Explore Courses, and location information by internet protocol address. These additional data are integrated in the activity datascape.
 
-Figure 1 shows the activity log datascape (data model) ![Activity Log Datascape](readme_figs/datascapeCropped.png) as a set of interconnected tables.
+Figure 1 shows the activity log datascape (data model) ![Activity Log Datascape](readme_figs/datascape.png) as a set of interconnected tables.
 
 These tables provide access to all the information in the activity log. The *Activities* table at the top contains one row for each action. The supplemental information that is stored with each action in every record of the activity table is distributed to the tables connected by blue links. The black links contain information from external sources. All blue-linked tables are connected via the *row_id* primary key of each table.
+
+## The Tables---Overview
+
+Other than the central Activities table, there are seven tables filled with information from activity_log entries. In addition, two auxiliary tables are added for convenience: the course catalog, and internet origins by IP address.
+
+- Activities: hub with one entry per log entry. Holds the information common to all entries, such as time and student hash.
+- ContextPins: some actions deposit a visitor's pins at the time of the action along with the action's other information. Those pinned courses are contained in the ContextPins table.
+- CourseInfo: an excerpt of the course catalog; information can be joined with other tables via crs_id.
+- CrseSearches: search terms and results from searches visitors entered into the search box. Return information changed over time:
+    * Early search results contain lists of zeroes, one for each course found. That is only the number of results is available
+    * Later, the PeopleSoft six-digit course ID numbers were returned for each course.
+    * Later, the results were separated into course results and instructor results.
+- CrseSelects: visitor clicking on a search result
+- EnrollmentHist: similar to ContextPins, the records for some actions include the visitor's enrollments
+- InstructorLookup: clicks on particular instructors to see their profile
+- IpLocation: publicly available information about request origin. Mostly provided for Covid related investigations.
+- Pins: course pin actions
+- SchoolSubparts: for each course subject (CS, PHIL, ...), the responsible department, the School, and in the case of H&S the subschool
+- Unpins: unpinning courses
+
+## Strategy Tricks
+
+The table columns are chosen to (reasonably) reflect their meaning, but also to enable joins that were anticipated to be of use. The *row_id* and *crs_id* stand out. The row_id ties all tables to each other, and in particular to the Activities table. The column is central to all investigations.
+
+Here are some potential approaches that were imagined during the schema design. None have been tested.
+
+- Join search terms or search results via crs_id or crs_code with the CourseInfo table. This procedure can enrich understanding of visitor intent.
+
+For example, the CourseInfo entry example below could be found from the crs_id search results, or from a search term "AA 47SI". The reference would reveal all this additional information about the search, and the likely visitor intent.
+```
+             id: 1
+         crs_id: 217539
+        acad_yr: 2015-2016
+        subject: AA
+    catalog_nbr: 47SI
+       crs_code: AA 47SI
+      crs_title: Why Go To Space?
+crs_description: Why do we spend billions of dollars exploring space? What can modern policymakers, entrepreneurs, and industrialists do to help us achieve our goals beyond planet Earth? Whether it is the object of exploration, science, civilization, or conquest, few domains have captured the imagination of a species like space. This course is an introduction to space policy issues, with an emphasis on the modern United States. We will present a historical overview of space programs from all around the world, and then spend the last five weeks discussing present policy issues, through lectures and guest speakers from NASA, the Department of Defense, new and legacy space industry companies, and more. Students will present on one issue that piques their interest, selecting from various domains including commercial concerns, military questions, and geopolitical considerations.
+           gers: ('',)
+  grading_basis: Satisfactory/No Credit
+     acad_group: ENGR
+       acad_org: AEROASTRO
+```
+
+- Use the IpLocation table joined to Activities for an estimate of visitors accessing from on, versus off campus locations. This information might be of interest when looking for Covid related effects
+- The entries in InstructorLookup are created by visitors expending the extra effort of clicking on a particular instructor to see their profile
+- Use the ContextPins and EnrollmentHist tables to estimate a visitor's goal mindset during interactions.
 
 ##Activities Table
 
@@ -66,14 +113,18 @@ Some actions that are *not* about (un)pinning contain a list of all courses alre
 
 ## Search-Related Tables
 
-Only searches in the Carta course search box at the top of the interface are included in the *CrseSearches* table. The table contains the search terms used. The action time in the associated *Activities* table *created_at* rows refer to the start of the visitor typing.
+Only searches in the Carta course search box at the top of the interface are included in the *CrseSearches* table. The table contains the search terms used. The action time in the associated *Activities* table *created_at* rows refer to the start of the visitor typing. The entry of a search term generates many activity_log entries as entered term fragments are sent to Carta for result popups. There migth be a log entry for "ph", another for "phys", and a third for "physics 123". These intermediate actions are filtered out.
 
-The *InstructorLookups* table contains the names of instructors for whom searches were entered in the search box at the top. Like this example:
+The search results in recent years look like the following two rows:
 
 | row_id | search_term       | crs_res                  | instructor_res              |
 |----------------------------|--------------------------|-----------------------------|
 |   1158 | physics 41a       | [123782, 125396, 125398] |     NULL                    |
 |   1197 | Apple, strm: 1174 |                          | Mark Applebaum, Robin Apple |
+
+When a search matched courses, the respective course IDs are noted. When an intructor matched, the hits are recorded in the instructor_res column.
+
+The *InstructorLookups* table contains the names of instructors whose profile visitors requested.
 
 
 ## Enrollment
@@ -122,6 +173,24 @@ The *IpLocation* table includes information obout internet protocol address loca
 |     time_zone | -07 |00 |
 | country_phone | 1 |
 |     area_code | 650 |
+
+The *SchoolSubparts* table connects Stanford Schools, Departments, and course catalog subjects (CS, PHIL, etc.). Extract:
+
+```
++----------+------------+--------------------------------+------------+-----------------+
+| subject  | department | subschool                      | acad_group | subschool_short |
++----------+------------+--------------------------------+------------+-----------------+
+| A&AHIST  | OLDSTANF   | Stanford University (Past)     | OLDSTANF   | OLDSTANF        |
+| AA       | AEROASTRO  | NULL                           | ENGINEER   | ENGINEER        |
+| PHIL     | PHILOSOPHY | H&S Div of Humanities & Arts   | HUMSCI     | H&SHumArts      |
+| POLISCI  | SUPROGFLOR | H&S Div of Social Sciences     | HUMSCI     | H&SSocSci       |
+| PWR      | VPUE       | NULL                           | VPUE       | VPUE            |
+| SIW      | HUMSCI     | Humanities & Sciences          | HUMSCI     | H&SHumSci       |
+| PE       | ATHLETICS  | NULL                           | DAPER      | DAPER           |
+| PE       | MEDDPT     | NULL                           | DAPER      | DAPER           |
+| PEDS     | PEDIATRICS | NULL                           | MEDICINE   | MEDICINE        |
+```
+
 
 Again, the natural language query facility is set up to make connections with the *crs_id* of the *CourseInfo* table, and the *row_id* of the *IpLocation* table automatic.
 
