@@ -124,7 +124,8 @@ class ActivityLogCleaner(object):
     
     # Extract instructor sunet id from
     #   '{sunet:rjohari}'
-    instructor_profile_pat = re.compile(r'[^:]*:([^}]*).*')
+    #instructor_profile_pat = re.compile(r'[^:]*:([^}]*).*')
+    instructor_profile_pat = re.compile(r'[^>]*>.([a-zA-Z]*).*')
     
     # Search term pattern: extract search term from
     #    '{search_term_accumulator:cs 1}
@@ -248,7 +249,6 @@ class ActivityLogCleaner(object):
             # Process a row at a time:
             reader = csv.reader(fd, delimiter='\t')
             _header = next(reader)
-            prev_id = 0
             # Are we to pick up where we left off?
             if type(self.start_fresh) == int:
                 # Yes, so skip the already-done rows:
@@ -258,17 +258,10 @@ class ActivityLogCleaner(object):
             for row in reader:
                 try:
                     self.cur_id = int(row[ID_POS])
-                    
                     # About 575 early entries have emplid == 0;
                     # ignore those.
                     if row[EMPLID_POS] == '0':
                         continue
-                    # Guard against the gzipped file having
-                    # duplicates:
-                    if self.cur_id <= prev_id:
-                        continue
-                    else:
-                        prev_id = self.cur_id
                 except Exception as _e:
                     self.log.err(f"Row does not have a row id: {row}")
                     continue
@@ -287,9 +280,8 @@ class ActivityLogCleaner(object):
 
         # Create indexing:
         self.log.info("Creating indexes on row_id for ...")
-        self.log.info("Activities ...")
-        self.db.execute("CREATE UNIQUE INDEX row_id_idx ON Activities(row_id)")
         self.log.info("ContextPins ...")
+        self._index_if_not_exists('row_id_idx', 'ContextPins', 'row_id')
         self.db.execute("CREATE INDEX row_id_idx ON ContextPins(row_id);")
         self.log.info("CrseSearches ...")
         self.db.execute("CREATE INDEX row_id_idx ON CrseSearches(row_id);")
@@ -341,6 +333,11 @@ class ActivityLogCleaner(object):
         action = row[ACTION_POS]
         emplid = row[EMPLID_POS]
         
+        # So far, it will be necessary further down
+        # to add an activity table record for this
+        # action:
+        add_activity_record = True
+        
         # Check whether a search term is being typed in,
         # and the typing is done:
         
@@ -368,14 +365,16 @@ class ActivityLogCleaner(object):
                 # Add the ongoing search action to the search buffer,
                 # and then continue to process the row:
                 self.commit_search_action(row)
+                # We already added an activity record
+                # when we started the search request:
+                add_activity_record = False
             else:
                 # Keep collecting search term chars:
                 self.extract_find_search(row, row_id)
                 return
 
-        else:
+        if add_activity_record:
             # Not in middle of search word typing:
-            #*******!!!!! find_search, search, no srch state yet
             self.add_activity_record(row)
 
         # Add other info contained in the row:
@@ -725,10 +724,7 @@ class ActivityLogCleaner(object):
                      crse_res,
                      instr_res
                      ))
-        # Add the activity record for this now concluded
-        # search:
-        #****** SOURCE OF DUPLICATES! REMOVE WHEN SURE.
-        #*******self.add_activity_record(tuple(self.crs_search_states.values()))
+
         del self.crs_search_states[emplid]
 
     #------------------------------------
@@ -758,8 +754,10 @@ class ActivityLogCleaner(object):
     def extract_instructor_profile(self, row, row_id):
         
         instructor_spec = row[KEY_PARAMETER_POS]
-        instructor = self.instructor_profile_pat.search(instructor_spec).group(1)
-        self.buffer(self.instructor_lookup_buf, (row_id, instructor))
+        instructor_match = self.instructor_profile_pat.match(instructor_spec)
+        if instructor_match is not None:
+            instructor = instructor_match.group(1)
+            self.buffer(self.instructor_lookup_buf, (row_id, instructor))
 
     #------------------------------------
     # handle_pin_unpin
@@ -1008,7 +1006,40 @@ class ActivityLogCleaner(object):
             tbl_exists = next(self.db.query(query))
             if tbl_exists == 1:
                 self.db.dropTable(tbl_nm)
-                
+
+    #------------------------------------
+    # _index_if_not_exists
+    #-------------------
+    
+    def _index_if_not_exists(self, idx_nm, tbl_nm, col_nm):
+        '''
+        If an index on tbl_nm's col_nm does not yet exist,
+        create one. Else do noting. Checks for index of any
+        name, disregarding idx_nm. This arg is only used when
+        an index is actually created.
+        
+        col_nm is a string as it would appear between parentheses
+        in an index creation statement. Examples: 'row_id' or 'row_id, subject' 
+        
+        :param idx_nm: name for index if one does get created
+        :type idx_nm: str
+        :param tbl_nm: name of table on which index presence is
+            to be checked.
+        :type tbl_nm: str
+        :param col_nm: column name(s) for the index
+        :type col_nm: str
+        '''
+        
+        try:
+            _res = next(self.db.query(f'''SELECT * FROM information_schema.statistics 
+                                         WHERE table_schema = "{self.DB_NAME}"
+                                           AND table_name = "{tbl_nm}" 
+                                           AND column_name = "{col_nm}";'''
+            ))
+        except StopIteration:
+            return
+        self.db.execute(f"CREATE INDEX {idx_nm} ON {tbl_nm}({col_nm});")
+
     #------------------------------------
     # flush_buffer
     #-------------------
