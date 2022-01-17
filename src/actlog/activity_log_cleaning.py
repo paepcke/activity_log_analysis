@@ -220,10 +220,6 @@ class ActivityLogCleaner(object):
                                     'area_code'))
             }
         
-        # Accumulator for search terms as they are typed
-        # to avoid too many db entries of the same search
-        # activity:
-        #******self.search_term_accumulator = bytearray(50)
         # All the currently searching emplids:
         self.crs_search_states = {}
         
@@ -1088,10 +1084,6 @@ class ActivityLogCleaner(object):
                     print(f"Search terms truncated: {self.truncated_search_terms}")
                 else:
                     self.log.warn(f"Warnings insert into tbl {dest_tbl}: {warns}")
-                #**************
-                #row_num = re.search(r'at row ([0-9]*).*', 'foo at row 878 and').group(1)
-                #print('foo')
-                #**************
 
             self.log.warn(f"Warnings insert into tbl {dest_tbl}: {warns}")
 
