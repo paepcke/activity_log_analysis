@@ -70,12 +70,11 @@ Only searches in the Carta course search box at the top of the interface are inc
 
 The *InstructorLookups* table contains the names of instructors for whom searches were entered in the search box at the top. Like this example:
 
-+--------+-------------------+--------------------------+-----------------------------+
 | row_id | search_term       | crs_res                  | instructor_res              |
-+--------+-------------------+--------------------------+-----------------------------+
+|----------------------------|--------------------------|-----------------------------|
 |   1158 | physics 41a       | [123782, 125396, 125398] |     NULL                    |
 |   1197 | Apple, strm: 1174 |                          | Mark Applebaum, Robin Apple |
-+--------+-------------------+--------------------------+-----------------------------+
+
 
 ## Enrollment
 
