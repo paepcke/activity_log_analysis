@@ -1,23 +1,23 @@
 ## Activity Log Exploration
 
-Carta has maintained an activity log, which recorded high level visitor activities on the system. The log is semantically at a higher level than click streams in that entries are about activities, such as searching for a course or instructor, pinning, or unpinning courses. The log spans the time from Oct 2016 to Nov 2021, and contains 20,714,381 visitor activities
+Carta has maintained an activity log, which recorded high level visitor activities on the system. The log is semantically at a higher level than click streams in that entries are about activities, such as searching for a course or instructor, pinning, or unpinning courses. The log spans the time from Oct 2015 to Nov 2021, and contains 20,714,381 visitor activities
 
-Each activity comes with related information. For example, a *pin* action log entry includes the course that was pinned, as well as the courses that the student has pinned earlier, and the courses in which they are enrolled at the time of the action.
+Each activity entry includes an action identifyer, and comes with information related to that action. For example, a *pin* action log entry includes the course that was pinned, as well as the courses that the student has pinned earlier, and the courses in which they are enrolled at the time of the action. Similarly, search actions include the search term and Carta's returned results.
 
 The following access methods are available to analysts, in order of *time to skill level*, i.e. the amount and difficulty of required access technology: 
 
-- Tableau natural language query (NLQ) access
+- Tableau natural language query (AskData) access (experimental)
 - Tableau interactive visualization building
 - Python/R access to the set of underlying database tables
 - SQL access to the database tables
 
-The natural language access is organized by analysis focus, such as origin and nature of an action, pinning and unpinning, enrollment, etc. Questions may include *"How many students?"* *"Pinned courses over time"*. *"Top 10 enrollments*". An [online tutorial](https://www.youtube.com/watch?v=27aIgkNyVa0) provides an in-depth introcudtion to this *Ask Data* facility. A [short getting-started section](#nql_getting_started] is provided below. The [NLQ access is available via the Web](https://us-west-2b.online.tableau.com/#/site/paepcke/datasources/15217696/askData).
+The natural language access vocabulary is tied to the activity action, such as pinning, search, etc. Questions may include *"How many students?"* *"Pinned courses over time"*. *"Top 10 enrollments*". An [online tutorial](https://www.youtube.com/watch?v=27aIgkNyVa0) provides an in-depth introcudtion to this *Ask Data* facility. A [short getting-started section](#AskData-Getting-Started] is provided below. The [AskData access is available via the Web](https://us-west-2b.online.tableau.com/#/site/paepcke/datasources/15217696/askData).
 
 The data from the activity log have been supplemented by information from Explore Courses, and location information by internet protocol address. These additional data are integrated in the activity datascape.
 
 Figure 1 shows the activity log datascape (data model) ![Activity Log Datascape](readme_figs/datascapeCropped.png) as a set of interconnected tables.
 
-The *Activities* table at the top contains one row for each action. The supplemental information for the actions is stored in the tables connected by blue links. The black links contain information from external sources. All blue-linked tables are connected via the *row_id* primary key in each table.
+These tables provide access to all the information in the activity log. The *Activities* table at the top contains one row for each action. The supplemental information that is stored with each action in every record of the activity table is distributed to the tables connected by blue links. The black links contain information from external sources. All blue-linked tables are connected via the *row_id* primary key of each table.
 
 ##Activities Table
 
@@ -26,7 +26,7 @@ The *Activities* table at the top contains one row for each action. The suppleme
 |    row_id   | 1 |
 |    student  | $2b$15$Kk3zHbZyk9q2K4skrd/47OvPtG/KBoE41TftO6xwO0Tz7cIgJlj46 |
 |    ip_addr  | 171.66.16.37 |
-|   category  | piin |
+|   category  | pin |
 |  action_nm  | pin |
 | created_at  | 2015-10-24 07:56:58 |
 
@@ -41,7 +41,7 @@ The activity categories that are likely of interest are:
 
 ## Pinning-Related Tables
 
-The *Pin* and *Unpin* tables contain the course being handled. The quarters during which the respective pin/unpin actions occurred are available only via the *created_at* column of the *Activities* table. Again, to obtain information about the action associated with a particular pin in this table, use the *row_id* key to find information such as the date of the pin, the visitor hash, and more. You are only concerned with this fact for access methods other than the natural language queries, which make that connection themselves. For the SQLers among you:
+The *Pin* and *Unpin* tables contain the course being (un)pinned during all (un)pin actions. The quarters during which the respective pin/unpin actions occurred are available only via the *created_at* column of the *Activities* table. Again, to obtain information about the action associated with a particular pin in this table, use the *row_id* key to find information such as the date of the pin, the visitor hash, and more. You are only concerned with this detail for access methods other than the natural language queries, which make that connection themselves. For the SQLers among you:
 
 
 Given *Pins* table entry:
@@ -59,23 +59,22 @@ select * from Activities where row_id = 10354;
 | row_id | student  | ip_addr       | category    | action_nm | created_at          | updated_at          |
 +--------+----------+---------------+-------------+-----------+---------------------+---------------------+
 |  10354 | $2b$1... | 10.31.192.169 | find_search | search    | 2015-10-26 01:18:11 | 2015-10-26 01:18:11 |
-|  10354 | $2b$1... | 10.31.192.169 | find_search | search    | 2015-10-26 01:18:11 | 2015-10-26 01:18:11 |
 +--------+----------+---------------+-------------+-----------+---------------------+---------------------|
 ```
 
-Some actions contain a list of all courses pinned during the action. Those 'contextual' pins are available in the *ContextPins* table, which does include the quarter in which the pin occurred. It is structured just like the *Pins* table.
+Some actions that are *not* about (un)pinning contain a list of all courses already pinned when the action is taken. Those 'contextual' pins are available in the *ContextPins* table, which includes the quarter in which the pin occurred. It is structured just like the *Pins* table.
 
 ## Search-Related Tables
 
-Only searches in the Carta course search box at the top of the interface are included in the *CrseSearchs* table. The table contains the search terms used. The action time in the associated *Activities* table *created_at* rows refer to the start of the visitor typing.
+Only searches in the Carta course search box at the top of the interface are included in the *CrseSearches* table. The table contains the search terms used. The action time in the associated *Activities* table *created_at* rows refer to the start of the visitor typing.
 
 The *InstructorLookups* table contains the names of instructors for whom searches were entered in the search box at the top. Like this example:
 
-| row_id | search_term |
-|--------|-------------|
-|   1158 | physics 41a |
-|   1197 | spanlang 2a |
-+--------+-------------+
+| row_id | search_term       | crs_res                  | instructor_res              |
+|--------|-----------------  |--------------------------------------------------------|
+|   1158 | physics 41a       | [123782, 125396, 125398] |     NULL                    |
+|   1197 | Apple, strm: 1174 |                          | Mark Applebaum, Robin Apple |
++--------+-------------------+--------------------------+-----------------------------+
 
 ## Enrollment
 
@@ -126,12 +125,12 @@ The *IpLocation* table includes information obout internet protocol address loca
 
 Again, the natural language query facility is set up to make connections with the *crs_id* of the *CourseInfo* table, and the *row_id* of the *IpLocation* table automatic.
 
-## NQL Getting Started
+## AskData Getting Started
 
 Tableau's natural language query facility is relatively new. All Carta activity tables have been [introduced into Tableau Ask Data](https://us-west-2b.online.tableau.com/#/site/paepcke/datasources/15217696/askData), and uploaded to a server where natural language queries are available.
 [A brief written tutorial](https://help.tableau.com/current/pro/desktop/en-us/ask_data.htm), and [tutorial videos](https://www.youtube.com/watch?v=27aIgkNyVa0) are available.
 
-NLQ does not process complicated language. The processor uses the table and column names, as well as some understanding of statistics and visualization style smarts to make sense of text that users type. That said, we introduced synonyms, so that alternative vocabulary will work as well. Rather than having to use 'crs_id in table CrseSelects,' which is an integer denoting a course, one can use the word 'course' instead.
+AskData does not process complicated language. The processor uses the table and column names, as well as some understanding of statistics and visualization style smarts to make sense of text that users type. That said, we introduced synonyms, so that alternative vocabulary will work as well. Rather than having to use 'crs_id in table CrseSelects,' which is an integer denoting a course, one can use the word 'course' instead.
 
 Queries may build on each other. For example:
 
@@ -147,14 +146,14 @@ to get a time series line chart. If a barchart is prefered, one could continue w
 
 The NQL interface is organized into *lenses*, which hide tables or fields unimportant to particular analysis tasks to help the analyst focus attention on just one inquiry.  The lenses are human-created, and can be changed. The above mentioned synonyms are associated with lenses. That is, each analysis task can have its own set of synonyms.
 
-The change which lens to use, or to work in the NLQ using all tables at once, go back to the [initial
+The change which lens to use, or to work in the AskData using all tables at once, go back to the [initial
 URL](https://us-west-2b.online.tableau.com/#/site/paepcke/datasources/15217696/askData).
 
 If you are familiar with using Tableau Desktop, worksheets evolving from the queries can be downloaded and then developed futher. From within Tableau Desktop they can be downloaded to CSV for processing in R or Python. This means you'll need to get a free-for-EDU copy of Tableau Desktop.
 
 ### Tips and Cautions
 
-Tableau's NLQ is still being developed, and can be finicky. 
+Tableau's AskData is still being developed, and can be finicky. 
 
 - The best advice is to pay attention to the menus that pop down as you enter questions. Notice the table and fields to which each offer in the menu refers. You can consult the list of tables and fields on the left for the choice most likely to succeed.
 - Note the pulldown menu on the upper right of the visualization pane. You can easily change to an alternative viz.
