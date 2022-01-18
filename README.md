@@ -1,10 +1,10 @@
 ## Activity Log Exploration
 
-Carta has maintained an activity log, which recorded high level visitor activities on the system. The log is semantically at a higher level than click streams in that entries are about activities, such as searching for a course or instructor, pinning, or unpinning courses. The log spans the time from Oct 2015 to Nov 2021, and contains 20,714,381 visitor activities
+Carta has maintained an activity log, which recorded high level visitor activities on the system. The log is semantically at a higher level than click streams, in that entries are about activities, such as searching for a course or instructor, pinning, or unpinning courses. The log spans the time from Oct 2015 to Nov 2021, and contains about 10M site visitor activities
 
 Each activity entry includes an action identifyer, and comes with information related to that action. For example, a *pin* action log entry includes the course that was pinned, as well as the courses that the student has pinned earlier, and the courses in which they are enrolled at the time of the action. Similarly, search actions include the search term and Carta's returned results.
 
-The following access methods are available to analysts, in order of *time to skill level*, i.e. the amount and difficulty of required access technology: 
+The following access methods are available to analysts, in order of required skill level:
 
 - Tableau natural language query (AskData) access (**experimental**)
 - Tableau interactive visualization building
@@ -13,29 +13,33 @@ The following access methods are available to analysts, in order of *time to ski
 
 The natural language access vocabulary is tied to the activity action, such as pinning, search, etc. Questions may include *"How many students?"* *"Pinned courses over time"*. *"Top 10 enrollments*". An [online tutorial](https://www.youtube.com/watch?v=27aIgkNyVa0) provides an in-depth introcudtion to this *Ask Data* facility. A [short getting-started section](#askdata-getting-started) is provided below. The [AskData access is available via the Web](https://us-west-2b.online.tableau.com/#/site/paepcke/datasources/15217696/askData).
 
-The data from the activity log have been supplemented by information from Explore Courses, and location information by internet protocol address. These additional data are integrated in the activity datascape.
+The data from the activity log have been supplemented by information from Explore Courses, location information by internet protocol address, and Stanford's associations between departments, schools and subschools (in H&S).
 
-Figure 1 shows the activity log datascape (data model) ![Activity Log Datascape](readme_figs/datascape.png) as a set of interconnected tables.
+Figure 1 shows the activity log datascape (data model)
 
-These tables provide access to all the information in the activity log. The *Activities* table at the top contains one row for each action. The supplemental information that is stored with each action in every record of the activity table is distributed to the tables connected by blue links. The black links contain information from external sources. All blue-linked tables are connected via the *row_id* primary key of each table.
+![Activity Log Datascape](readme_figs/datascape.png)
 
-## The Tables---Overview
+as a set of interconnected tables.
 
-Other than the central Activities table, there are seven tables filled with information from activity_log entries. In addition, three auxiliary tables are added for convenience: the course catalog, and internet origins by IP address.
+These tables provide access to all the information in the activity log. The *Activities* table at the top contains one row for each action. The supplemental information that is stored with each action in every record of the activity table is distributed to the tables connected by blue links. The black links contain information from the mentioned external sources. All blue-linked tables are connected via the *row_id* primary key of each table.
+
+## The Tables&mdash;Overview
+
+Other than the central Activities table, there are seven tables filled with information from activity_log entries. In addition, three auxiliary tables are added for convenience: the course catalog, internet origins by IP address, and department/school/subschool relationships at Stanford:
 
 - **Activities**: hub with one record per log entry. Holds the information common to all entries, such as time and student hash.
 - **ContextPins**: some actions deposit a visitor's pins at the time of the action along with the action's other information. Those pinned courses are contained in the ContextPins table.
 - **CourseInfo**: an excerpt of the course catalog; information can be joined with other tables via crs_id.
-- **CrseSearches**: search terms and results from searches visitors entered into the search box. Return information changed over time:
-    * Early search results contain lists of zeroes, one for each course found. That is, only the number of results is available
+- **CrseSearches**: search terms and results from searches that visitors entered into the search box. Return information changed over time:
+    * Early era (~2015) search results contain lists of zeroes, one for each course found. That is, only the number of results is available
     * Later, the PeopleSoft six-digit course ID numbers were returned for each course.
     * Later still, the results were separated into course results and instructor results.
 - **CrseSelects**: visitor clicking on a search result
 - **EnrollmentHist**: similar to ContextPins, the records for some actions include the visitor's enrollments
-- **InstructorLookup**: clicks on particular instructors to see their profile
+- **InstructorLookup**: visitor clicked on an instructor link to see their profile
 - **IpLocation**: publicly available information about request origin. Mostly provided for Covid related investigations.
 - **Pins**: course pin actions
-- **SchoolSubparts: for each course subject (CS, PHIL, ...), the responsible department, the School, and in the case of H&S the subschool
+- **SchoolSubparts**: for each course subject (CS, PHIL, ...), the responsible department, the School, and in the case of H&S the subschool
 - **Unpins**: unpinning courses
 
 ## Strategy Tricks
@@ -62,11 +66,11 @@ crs_description: Why do we spend billions of dollars exploring space? What can m
        acad_org: AEROASTRO
 ```
 
-- Use the IpLocation table joined to Activities for an estimate of visitors accessing from on, versus off campus locations. This information might be of interest when looking for Covid related effects
+- Use the IpLocation table joined to Activities for an estimate of visitors accessing from on&ndash;, versus off campus locations. This information might be of interest when looking for Covid related effects
 - The entries in InstructorLookup are created by visitors expending the extra effort of clicking on a particular instructor to see their profile
 - Use the ContextPins and EnrollmentHist tables to estimate a visitor's goal mindset during interactions.
 
-##Activities Table
+## Activities Table
 
 | Column Name              |   Example Entry         |
 |--------------------------|------------------------|
@@ -113,23 +117,25 @@ Some actions that are *not* about (un)pinning contain a list of all courses alre
 
 ## Search-Related Tables
 
-Only searches in the Carta course search box at the top of the interface are included in the *CrseSearches* table. The table contains the search terms used. The action time in the associated *Activities* table *created_at* rows refer to the start of the visitor typing. The entry of a search term generates many activity_log entries as entered term fragments are sent to Carta for result popups. There migth be a log entry for "ph", another for "phys", and a third for "physics 123". These intermediate actions are filtered out.
+Only searches in the Carta course search box at the top of the interface are included in the *CrseSearches* table. Not included are searches over course evaluations. The table contains the search terms used.
 
-The search results in recent years look like the following two rows:
+The *created_at* time in the associated *Activities* table rows refer to the start of the visitor typing. A visitor typing a search term generates many entries in the original activity_log, as typed term fragments are sent to Carta for eliciting result popups. Thus in the original log file there might be a log entry for "ph", another for "phys", and a third for "physics 123". These intermediate actions are filtered out from the tables provided here. This means that row_id are guaranteed to be monotonically increasing in time, but that not all row_id integers will be present. The 'missing' row_ids are the log entries of the partially typed search terms.
+
+The search results from recent Carta years look like the following two rows:
 
 | row_id | search_term       | crs_res                  | instructor_res              |
-|----------------------------|--------------------------|-----------------------------|
+|--------|-------------------|--------------------------|-----------------------------|
 |   1158 | physics 41a       | [123782, 125396, 125398] |     NULL                    |
 |   1197 | Apple, strm: 1174 |                          | Mark Applebaum, Robin Apple |
 
-When a search matched courses, the respective course IDs are noted. When an intructor matched, the hits are recorded in the instructor_res column.
+When a search matched courses, the respective course IDs are noted. When an instructor matched, the hits are recorded in the *instructor_res* column.
 
 The *InstructorLookups* table contains the names of instructors whose profile visitors requested.
 
 
 ## Enrollment
 
-The best source for enrollment continues to be the *student_enrollment* table in the Carta main database. However, like for pins, a number of actions include the enrollment history of the acting visitor. the *EnrollmentHist* table contains those context history lists. These three entries from the *EnrollmentHist* table say "the visitor of action with *row_id* 10 in the *Activities* table was enrolled in three courses at the time they executed the logged action":
+The best source for enrollment continues to be the *student_enrollment* table in the Carta main database. However, as for pins, a number of actions include the enrollment history of the acting visitor. the *EnrollmentHist* table contains those context history lists. These three entries from the *EnrollmentHist* table say "the visitor of action with *row_id* 10 in the *Activities* table was enrolled in three courses at the time they executed the logged action":
 
 | row_id | crs_id |
 |--------|--------|
@@ -139,9 +145,9 @@ The best source for enrollment continues to be the *student_enrollment* table in
 
 ## Auxiliary tables
 
-As seen in Figure 1, two tables external to the activity log information make queries more informative.
+As seen in Figure 1, three tables external to the activity log information make queries more informative.
 
-There an example from the *CourseInfo* table:
+An example from the *CourseInfo* table:
 
 | Column Name       |  Example Entry         |
 | ----------------- | ---------------------- |
@@ -192,14 +198,14 @@ The *SchoolSubparts* table connects Stanford Schools, Departments, and course ca
 ```
 
 
-Again, the natural language query facility is set up to make connections with the *crs_id* of the *CourseInfo* table, and the *row_id* of the *IpLocation* table automatic.
+The following section briefly introduces Tableau's emerging natural language facility. The system accepts semi constrained English queries, and generates charts by querying the underlying tables.
 
 ## AskData Getting Started
 
 Tableau's natural language query facility is relatively new. All Carta activity tables have been [introduced into Tableau Ask Data](https://us-west-2b.online.tableau.com/#/site/paepcke/datasources/15217696/askData), and uploaded to a server where natural language queries are available.
 [A brief written tutorial](https://help.tableau.com/current/pro/desktop/en-us/ask_data.htm), and [tutorial videos](https://www.youtube.com/watch?v=27aIgkNyVa0) are available.
 
-AskData does not process complicated language. The processor uses the table and column names, as well as some understanding of statistics and visualization style smarts to make sense of text that users type. That said, we introduced synonyms, so that alternative vocabulary will work as well. Rather than having to use 'crs_id in table CrseSelects,' which is an integer denoting a course, one can use the word 'course' instead.
+AskData does not process complicated language. The processor uses the table and column names, as well as some understanding of statistics and visualization styles (bar chart vs. line chart) to make sense of text that users type. That said, our installation is initialized to 'understand' synonyms, so that alternative vocabulary will work as well. Rather than having to use 'crs_id in table CrseSelects,', one can use the word 'course' instead.
 
 Queries may build on each other. For example:
 
@@ -213,20 +219,20 @@ to get a time series line chart. If a barchart is prefered, one could continue w
 
     as a barchart
 
-The NQL interface is organized into *lenses*, which hide tables or fields unimportant to particular analysis tasks to help the analyst focus attention on just one inquiry.  The lenses are human-created, and can be changed. The above mentioned synonyms are associated with lenses. That is, each analysis task can have its own set of synonyms.
+The AskData interface is organized into *lenses*, which hide tables or fields unimportant to particular analysis tasks. Lenses help analysts focus attention on just one line of inquiry.  The lenses are human-created, and can be changed. The above mentioned synonyms are associated with lenses. That is, each analysis task can have its own set of synonyms.
 
-The change which lens to use, or to work in the AskData using all tables at once, go back to the [initial
+The change which lens to use, or to work in AskData using all tables at once, go back to the [initial
 URL](https://us-west-2b.online.tableau.com/#/site/paepcke/datasources/15217696/askData).
 
-If you are familiar with using Tableau Desktop, worksheets evolving from the queries can be downloaded and then developed futher. From within Tableau Desktop they can be downloaded to CSV for processing in R or Python. This means you'll need to get a free-for-EDU copy of Tableau Desktop.
+If you are familiar with using Tableau Desktop, worksheets evolving from the queries can be downloaded and then developed further in the full application. From within Tableau Desktop they can be downloaded to CSV for processing in R or Python. This means that to turn charts back into csv tables you'll need to get a free-for-EDU copy of Tableau Desktop.
 
 ### Tips and Cautions
 
-Tableau's AskData is still being developed, and can be finicky. 
+Tableau is still developing AskData, and the system can be finicky. 
 
 - The best advice is to pay attention to the menus that pop down as you enter questions. Notice the table and fields to which each offer in the menu refers. You can consult the list of tables and fields on the left for the choice most likely to succeed.
-- Note the pulldown menu on the upper right of the visualization pane. You can easily change to an alternative viz.
-- Each question is shown in more stylized terms above the question box. Check those terms to see whehter the system grasped your intent. You can often pull down the boxes of the individual terms and reveal alterntives for you to choose, such as adding or removing from filters.
+- Note the pulldown menu on the upper right of the visualization pane. You can easily change to an alternative chart type.
+- Each question is shown in more stylized terms above the question box. Check those terms to see whether the system grasped your intent. You can often pull down the boxes of the individual terms and reveal alternatives for you to choose, such as adding or removing from filters.
 - Map Viz pulldown: Map, Text Table
 - Country/City are based on the IP address of the Carta visitor, *not* from any university table.
 - To pan maps: hold left mouse button for a couple of seconds, then move the mouse. Without the wait the move will result in a selection on the map.
@@ -276,12 +282,13 @@ Tableau's AskData is still being developed, and can be finicky.
 
 # Database Access
 
-The authoritative source of data are the DB tables in MySQL on quintus.stanford.edu. Those with an account on that DB server can either login via the command line:
+The authoritative source of data are the DB tables in MySQL on quintus.stanford.edu. Those with an account on that DB server can login via the command line:
 
 ```
 mysql -h quintus.stanford.edu -u <uname> -p activity_log
 ```
 
 If you are outside the Stanford network, you will need to VPN in first. For Sequel Pro users, Figure 2 shows the proper connection setup.
+
 ![SequelPro](readme_figs/mysqlQuintusSQLProScreenshot.png).
 
