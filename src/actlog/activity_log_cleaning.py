@@ -119,9 +119,13 @@ class ActivityLogCleaner(object):
     context_enrl_hist_late_phase2_pat  = re.compile(b'CRSE_ID: ([0-9]{6})') 
     
     p_history_pat = re.compile(b"#<Enrollment (STRM: [0-9]{4}, CRSE_ID: [0-9]{6})")
-    # Extract 'selected course' id from 
+
+    # Extract course ID id from get_course_info/view: 
     #   {selected_course:111846, name:BIO42}
-    crs_selection_pat = re.compile(r'[^:]*:([^,]*).*')
+    crs_selection_pat = re.compile('[^:]*:([0-9]{6}).*')
+    # Similarly: extract course name from index/show_index_page
+    #   {controller:pages, action:index, name:STATS50, quarter:1172}
+    crs_index_lookup_pat = re.compile('.*name:([^,]*).*') 
     
     # Extract instructor sunet id from
     #   '{sunet:rjohari}'
@@ -150,6 +154,10 @@ class ActivityLogCleaner(object):
         self.log = LoggingService()
 
         self.db_user = db_user
+        
+        # Lookup dict crs nm to crs ID: 
+        #     'STATS50' : 123456
+        self.crs_id_lookup = self._load_crs_id_lookup_tbl()
         
         # The data for each action type is accumulated
         # in a separate buffer, and pushed down into a
@@ -262,6 +270,12 @@ class ActivityLogCleaner(object):
                 except Exception as _e:
                     self.log.err(f"Row does not have a row id: {row}")
                     continue
+                #**************
+                # caller = row[CALLER_POS]
+                # action = row[ACTION_POS]
+                # if not (caller == 'index' and action == 'show_index_page'):
+                #     continue
+                #**************
                 self.dispatch_row(row, self.cur_id)
                 # Time for printing progress?
                 cur_time = int(time.time())
@@ -333,7 +347,10 @@ class ActivityLogCleaner(object):
         self.log.info("Creating index on created_at for Activities...")
         self._index_if_not_exists('created_at_idx', 'Activities', 'created_at')
 
-        self.log.infor("Done indexing")
+        self.log.info("Creating index on action_nm for Activities...")
+        self._index_if_not_exists('action_nm_idx', 'Activities', 'action_nm')
+
+        self.log.info("Done indexing")
         
         self.db.close()
 
@@ -397,7 +414,8 @@ class ActivityLogCleaner(object):
         if caller == 'initial_recommendation':
             self.extract_pins(row, row_id)
             self.extract_enrl_history(row, row_id)
-        elif caller == 'get_course_info':
+        elif caller == 'get_course_info' or \
+             (caller == 'index' and action == 'show_index_page'):
             self.handle_select_course(row, row_id)
         elif caller in ['update_rec', 'pin', 'unpin'] and action in ('pin', 'unpin'):
             self.handle_pin_unpin(row, row_id)
@@ -594,10 +612,26 @@ class ActivityLogCleaner(object):
     
     def extract_course_select(self, row, row_id):
         
-        # Get string: b'{selected_course:111846, name:BIO42}'
+        # Get class ID from string: b'{selected_course:111846, name:BIO42}'
+        # or name from: '{controller:pages, action:index, name:STATS50, quarter:1172}'
         sel_crs_id_match = self.crs_selection_pat.search(row[KEY_PARAMETER_POS])
-        # Return the selected course:
-        return int(sel_crs_id_match.group(1))
+        if sel_crs_id_match is not None:
+            # Return the selected course:
+            return int(sel_crs_id_match.group(1))
+        # Second form?
+        sel_crs_nm_match = self.crs_index_lookup_pat.match(row[KEY_PARAMETER_POS])
+        if sel_crs_nm_match is not None:
+            # Now have 'STATS 60' or 'STATS60':
+            # Get the crs ID that matches the course name:
+            crs_nm = sel_crs_nm_match.group(1)
+            normal_nm = crs_nm.replace(' ','').upper()
+            try:
+                crs_id = self.crs_id_lookup[normal_nm]
+                return int(crs_id)
+            except KeyError:
+                # No course ID for this course:
+                return 0
+            
 
     #------------------------------------
     # extract_find_search
@@ -1246,6 +1280,23 @@ class ActivityLogCleaner(object):
         
         return None
         
+        
+    #------------------------------------
+    # _load_crs_id_lookup_tbl
+    #-------------------
+    
+    def _load_crs_id_lookup_tbl(self):
+        cur_dir = os.path.dirname(__file__)
+        data_file = os.path.join(cur_dir, 'data/crs_id_lookup.csv')
+        with open(data_file, 'r') as fd:
+            reader = csv.reader(fd)
+            crs_nm2crs_id_dict = {row[0] : row[1]
+                                  for row 
+                                  in reader
+                                  }
+        return crs_nm2crs_id_dict
+    
+
 # ------------------------- BufferClass ----------------
 
 class BufferClass:
