@@ -21,22 +21,22 @@ These tables provide access to all the information in the activity log. The *Act
 
 ## The Tables---Overview
 
-Other than the central Activities table, there are seven tables filled with information from activity_log entries. In addition, two auxiliary tables are added for convenience: the course catalog, and internet origins by IP address.
+Other than the central Activities table, there are seven tables filled with information from activity_log entries. In addition, three auxiliary tables are added for convenience: the course catalog, and internet origins by IP address.
 
-- Activities: hub with one entry per log entry. Holds the information common to all entries, such as time and student hash.
-- ContextPins: some actions deposit a visitor's pins at the time of the action along with the action's other information. Those pinned courses are contained in the ContextPins table.
-- CourseInfo: an excerpt of the course catalog; information can be joined with other tables via crs_id.
-- CrseSearches: search terms and results from searches visitors entered into the search box. Return information changed over time:
-    * Early search results contain lists of zeroes, one for each course found. That is only the number of results is available
+- **Activities**: hub with one record per log entry. Holds the information common to all entries, such as time and student hash.
+- **ContextPins**: some actions deposit a visitor's pins at the time of the action along with the action's other information. Those pinned courses are contained in the ContextPins table.
+- **CourseInfo**: an excerpt of the course catalog; information can be joined with other tables via crs_id.
+- **CrseSearches**: search terms and results from searches visitors entered into the search box. Return information changed over time:
+    * Early search results contain lists of zeroes, one for each course found. That is, only the number of results is available
     * Later, the PeopleSoft six-digit course ID numbers were returned for each course.
-    * Later, the results were separated into course results and instructor results.
-- CrseSelects: visitor clicking on a search result
-- EnrollmentHist: similar to ContextPins, the records for some actions include the visitor's enrollments
-- InstructorLookup: clicks on particular instructors to see their profile
-- IpLocation: publicly available information about request origin. Mostly provided for Covid related investigations.
-- Pins: course pin actions
-- SchoolSubparts: for each course subject (CS, PHIL, ...), the responsible department, the School, and in the case of H&S the subschool
-- Unpins: unpinning courses
+    * Later still, the results were separated into course results and instructor results.
+- **CrseSelects**: visitor clicking on a search result
+- **EnrollmentHist**: similar to ContextPins, the records for some actions include the visitor's enrollments
+- **InstructorLookup**: clicks on particular instructors to see their profile
+- **IpLocation**: publicly available information about request origin. Mostly provided for Covid related investigations.
+- **Pins**: course pin actions
+- **SchoolSubparts: for each course subject (CS, PHIL, ...), the responsible department, the School, and in the case of H&S the subschool
+- **Unpins**: unpinning courses
 
 ## Strategy Tricks
 
