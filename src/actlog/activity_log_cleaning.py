@@ -6,6 +6,7 @@ Created on Nov 18, 2021
 '''
 import argparse
 import csv
+import datetime
 import getpass
 import gzip
 import os
@@ -262,14 +263,17 @@ class ActivityLogCleaner(object):
                     self.log.err(f"Row does not have a row id: {row}")
                     continue
                 self.dispatch_row(row, self.cur_id)
+                # Time for printing progress?
                 cur_time = int(time.time())
                 if (cur_time - prev_sign_of_life) > self.SECS_BETWEEN_HEARTBEATS:
                     print(f"At record {self.cur_id}", end='\r')
                     prev_sign_of_life = cur_time
             # Finished:
+            # Close out any searches:
+            self.commit_hanging_search_actions(cur_log_time=row[CREATED_AT_POS])
+            
             for buf in self.buffer_tables.keys():
                 self.flush_buffer(buf)
-            self.db.close()
             # Break out of the inline progress report:
             print()
             self.log.info(f"Imported {self.cur_id} records.")
@@ -330,6 +334,8 @@ class ActivityLogCleaner(object):
         self._index_if_not_exists('created_at_idx', 'Activities', 'created_at')
 
         self.log.infor("Done indexing")
+        
+        self.db.close()
 
     #------------------------------------
     # process_one_row
@@ -369,10 +375,11 @@ class ActivityLogCleaner(object):
             #      'search_term_accumulator : <search term so far>
             #      }            
             
-            if  caller != 'find_search' or action != 'search':
+            if caller not in ('find_search', 'detailed_search') or action not in ('search', 'search_query'):
+            #****** REMOVE if caller != 'find_search' or action != 'search':
                 # Add the ongoing search action to the search buffer,
                 # and then continue to process the row:
-                self.commit_search_action(row)
+                self.commit_search_action(emplid)
                 # We already added an activity record
                 # when we started the search request:
                 add_activity_record = False
@@ -629,7 +636,8 @@ class ActivityLogCleaner(object):
         
         try:
             self.crs_search_states[emplid]['search_term_accumulator'] = search_term_so_far
-            self.crs_search_states[emplid]['output'] = cur_return_output
+            if cur_return_output != 'NULL':
+                self.crs_search_states[emplid]['output'] = cur_return_output
         except KeyError:
             # Search status does not exist yet:
             
@@ -661,10 +669,52 @@ class ActivityLogCleaner(object):
 
 
     #------------------------------------
+    # commit_hanging_search_actions
+    #-------------------
+    
+    def commit_hanging_search_actions(self, cur_log_time, time_threshold=None):
+        '''
+        If visitors are typing a search, but
+        then never finish, their search would be held
+        in the self.crs_search_states[emplid] forever.
+        If no typing occurred within time_threshold,
+        commit the search.
+        
+        If time_threshold is None, all searches are
+        closed out.
+        
+        :param cur_log_time: date and time where processing
+            is occurring in the log. Used to compute 'elapsed time'
+            when time_threshold is not None.
+        :type cur_log_time: str
+        :param time_threshold: number of seconds a search must have
+            been pending before concluding that it should be closed
+        :type time_threshold: {None | int}
+        '''
+        
+        if self.crs_search_states is None or len(self.crs_search_states) == 0:
+            return
+         
+        cur_log_time_obj = datetime.datetime.strptime(cur_log_time, '%Y-%m-%d %H:%M:%S')
+        if time_threshold is not None:
+            time_threshold_obj = datetime.timedelta(seconds=time_threshold)
+        
+        # Make a copy, b/c commit_search_action() will
+        # delete entries from the original:
+        for emplid, search_state in self.crs_search_states.copy().items():
+            search_start = search_state['created_at']
+            if time_threshold is not None:
+                search_start_obj = datetime.datetime.strptime(search_start, '%Y-%m-%d %H:%M:%S')
+                if cur_log_time_obj - search_start_obj >= time_threshold_obj:
+                    self.commit_search_action(emplid)
+            else:
+                self.commit_search_action(emplid)
+
+    #------------------------------------
     # commit_search_action
     #-------------------
     
-    def commit_search_action(self, row):
+    def commit_search_action(self, emplid):
         '''
         Searching for courses often triggers multiple
         activity_log actions as the search term is typed in.
@@ -699,11 +749,9 @@ class ActivityLogCleaner(object):
         
         Several formats of result outputs were added to activity_log
         over the years:
-        
             
 
         '''
-        emplid = row[EMPLID_POS]
         # Grab the 'OUTPUT' info, which consists of a dict
         # with two keys, like:
         #  
