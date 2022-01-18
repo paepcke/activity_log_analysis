@@ -6,12 +6,12 @@ Each activity entry includes an action identifyer, and comes with information re
 
 The following access methods are available to analysts, in order of *time to skill level*, i.e. the amount and difficulty of required access technology: 
 
-- Tableau natural language query (AskData) access (experimental)
+- Tableau natural language query (AskData) access (**experimental**)
 - Tableau interactive visualization building
 - Python/R access to the set of underlying database tables
 - SQL access to the database tables
 
-The natural language access vocabulary is tied to the activity action, such as pinning, search, etc. Questions may include *"How many students?"* *"Pinned courses over time"*. *"Top 10 enrollments*". An [online tutorial](https://www.youtube.com/watch?v=27aIgkNyVa0) provides an in-depth introcudtion to this *Ask Data* facility. A [short getting-started section](#AskData-Getting-Started] is provided below. The [AskData access is available via the Web](https://us-west-2b.online.tableau.com/#/site/paepcke/datasources/15217696/askData).
+The natural language access vocabulary is tied to the activity action, such as pinning, search, etc. Questions may include *"How many students?"* *"Pinned courses over time"*. *"Top 10 enrollments*". An [online tutorial](https://www.youtube.com/watch?v=27aIgkNyVa0) provides an in-depth introcudtion to this *Ask Data* facility. A [short getting-started section](#askdata-getting-started) is provided below. The [AskData access is available via the Web](https://us-west-2b.online.tableau.com/#/site/paepcke/datasources/15217696/askData).
 
 The data from the activity log have been supplemented by information from Explore Courses, and location information by internet protocol address. These additional data are integrated in the activity datascape.
 
