@@ -428,7 +428,7 @@ class ActivityLogCleaner(object):
                           'post_feedback'
                           ] or \
                 action in ['discount', 'undiscount', 'show_landing_page',
-                           'show_index_page', 'store_calendar_state',
+                           'store_calendar_state',
                            'user_message', 'confirm_user_message',
                            'reset_confirm_user_message', 'welcome_to_carta',
                            'repin', 'decline_user_message', 'reset_lcs_response',

@@ -25,22 +25,25 @@ These tables provide access to all the information in the activity log. The *Act
 
 ## The Tables&mdash;Overview
 
-Other than the central Activities table, there are seven tables filled with information from activity_log entries. In addition, three auxiliary tables are added for convenience: the course catalog, internet origins by IP address, and department/school/subschool relationships at Stanford:
+Other than the central Activities table, there are five tables filled with information from activity_log entries. In addition, three auxiliary tables are added for convenience: the course catalog, internet origins by IP address, and department/school/subschool relationships at Stanford:
 
 - **Activities**: hub with one record per log entry. Holds the information common to all entries, such as time and student hash.
 - **ContextPins**: some actions deposit a visitor's pins at the time of the action along with the action's other information. Those pinned courses are contained in the ContextPins table.
 - **CourseInfo**: an excerpt of the course catalog; information can be joined with other tables via crs_id.
 - **CrseSearches**: search terms and results from searches that visitors entered into the search box. Return information changed over time:
-    * Early era (~2015) search results contain lists of zeroes, one for each course found. That is, only the number of results is available
-    * Later, the PeopleSoft six-digit course ID numbers were returned for each course.
-    * Later still, the results were separated into course results and instructor results.
+    * Early era (<= 2015-10-24 17:00:14) search results contain lists of zeroes, one for each course found. That is, only the number of results is available
+    * Later (>= 2015-10-24 21:58:04), the PeopleSoft six-digit course ID numbers were returned for each course.
+    * Later still (beginning 2017-01-03), the results were separated into course results and instructor results.
 - **CrseSelects**: visitor clicking on a search result
 - **EnrollmentHist**: similar to ContextPins, the records for some actions include the visitor's enrollments
-- **InstructorLookup**: visitor clicked on an instructor link to see their profile
 - **IpLocation**: publicly available information about request origin. Mostly provided for Covid related investigations.
 - **Pins**: course pin actions
 - **SchoolSubparts**: for each course subject (CS, PHIL, ...), the responsible department, the School, and in the case of H&S the subschool
 - **Unpins**: unpinning courses
+
+The geographic distribution of Carta usage.
+
+![Distribution of Carta Visitors](readme_figs/GeoDistrib.png)
 
 ## Strategy Tricks
 
@@ -67,7 +70,6 @@ crs_description: Why do we spend billions of dollars exploring space? What can m
 ```
 
 - Use the IpLocation table joined to Activities for an estimate of visitors accessing from on&ndash;, versus off campus locations. This information might be of interest when looking for Covid related effects
-- The entries in InstructorLookup are created by visitors expending the extra effort of clicking on a particular instructor to see their profile
 - Use the ContextPins and EnrollmentHist tables to estimate a visitor's goal mindset during interactions.
 
 ## Activities Table
@@ -89,6 +91,11 @@ The activity categories that are likely of interest are:
                   details about the course.
 - pin/unpin : use of the Carta course pinning feature
 - instructor_profile : searching for instructor information.
+
+Figure 3 shows the frequency distribution of actions.
+
+![Distribution of Action Types](readme_figs/ActionDistribution.png)
+
 
 ## Pinning-Related Tables
 
@@ -130,7 +137,9 @@ The search results from recent Carta years look like the following two rows:
 
 When a search matched courses, the respective course IDs are noted. When an instructor matched, the hits are recorded in the *instructor_res* column.
 
-The *InstructorLookups* table contains the names of instructors whose profile visitors requested.
+Figure 4 shows the cyclicity of Carta searches.
+
+![Searches Over Time](readme_figs/NumSearchesByTime.png)
 
 
 ## Enrollment
