@@ -41,7 +41,7 @@ Other than the central Activities table, there are five tables filled with infor
 - **SchoolSubparts**: for each course subject (CS, PHIL, ...), the responsible department, the School, and in the case of H&S the subschool
 - **Unpins**: unpinning courses
 
-The geographic distribution of Carta usage.
+Figure 2: The geographic distribution of Carta usage.
 
 ![Distribution of Carta Visitors](readme_figs/GeoDistrib.png)
 
